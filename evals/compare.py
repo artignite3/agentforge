@@ -6,7 +6,7 @@ from pathlib import Path
 from statistics import mean
 
 from agentforge import Agent, AgentForge
-from agentforge.config import get_settings
+from agentforge.sdk import api_key_from_environment
 
 
 def main() -> None:
@@ -21,7 +21,7 @@ def main() -> None:
         "v1": "Repair the bug without modifying tests. Verify the fix.",
         "v2": "First reproduce the test failure, inspect the source, make the smallest repair, then verify all original tests. Avoid unnecessary calls.",
     }
-    with AgentForge(get_settings().api_key.get_secret_value(), args.url) as client:
+    with AgentForge(api_key_from_environment(), args.url) as client:
         for version, instructions in prompts.items():
             agent = Agent(
                 name="eval-repo-" + args.provider,

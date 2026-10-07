@@ -92,7 +92,7 @@ The SDK submits immediately; `wait()` is optional and has its own local timeout.
 
 ## Dashboard
 
-The dashboard uses live API data and keeps its API key only in memory. It provides Overview, Runs, Run details, Agents, Providers, and System health. Model and tool outputs are rendered as text, never HTML. See [screenshots](docs/screenshots/) after local visual verification.
+The dashboard uses live API data and keeps its API key only in memory. It provides Overview, Runs, Run details, Agents, Providers, and System health. Model and tool outputs are rendered as text, never HTML. Local visual captures are saved under `docs/screenshots/`, currently excluded by this checkout's Git rules.
 
 ## Verification
 
@@ -124,7 +124,7 @@ External provider calls can execute more than once across a crash or ambiguous t
 
 ## Deployment
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for a VM/TLS baseline, persistence, backups, scaling, and health checks. The complete Docker gateway needs a Docker-capable host; ordinary serverless application hosting is insufficient for that component.
+The complete Docker gateway needs a Docker-capable host; ordinary serverless application hosting is insufficient for that component. On a dedicated Linux VM, generate `.env`, set the socket group, configure `AGENTFORGE_ENVIRONMENT=production` and exact HTTPS origins, start Compose, and reverse-proxy localhost:8080 behind TLS. Keep database/Redis/gateway ports private. Back up the PostgreSQL volume with `pg_dump` and test restoration. Detailed deployment notes are in the local `DEPLOYMENT.md`, currently excluded by this checkout's Git rules.
 
 CI runs lint, type checking, unit tests, real PostgreSQL/Docker tests, dependency/security checks, migrations, and image builds. Public deployment still requires an operator-owned host/domain and credentials. A local Compose success alone does not establish production readiness.
 
@@ -144,4 +144,4 @@ CI runs lint, type checking, unit tests, real PostgreSQL/Docker tests, dependenc
 
 This is a **portfolio-oriented production baseline**, not enterprise production software. Deferred work: general repositories, shell/Python tools, streaming model tokens/SSE, user accounts and RBAC, distributed circuit breakers, tracing exporters, retention enforcement, arbitrary checkpoint replay, gVisor/Firecracker, learned routing, and larger semantic evaluations.
 
-The practical build plan and original idea comparison are in [docs/PLAN.md](docs/PLAN.md). The final release checklist is in [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md).
+The practical build plan, original idea comparison, release checklist, validation record, and screenshots are retained locally under `docs/`. This checkout currently ignores that directory in Git.
