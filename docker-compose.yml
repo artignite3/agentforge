@@ -1,0 +1,144 @@
+name: agentforge
+
+x-app: &app
+  image: agentforge-app:local
+  build: .
+  restart: unless-stopped
+  read_only: true
+  tmpfs: [/tmp:size=32m,noexec,nosuid,nodev]
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  pids_limit: 128
+  mem_limit: 384m
+  cpus: 1
+  networks: [control]
+
+x-env: &runtime-env
+  AGENTFORGE_ENVIRONMENT: ${AGENTFORGE_ENVIRONMENT:-development}
+  AGENTFORGE_API_KEY: ${AGENTFORGE_API_KEY:?Run python scripts/bootstrap.py first}
+  AGENTFORGE_SANDBOX_KEY: ${AGENTFORGE_SANDBOX_KEY:?Run python scripts/bootstrap.py first}
+  AGENTFORGE_DATABASE_URL: postgresql+asyncpg://agentforge:${POSTGRES_PASSWORD:?Generate .env}@postgres:5432/agentforge
+  AGENTFORGE_REDIS_URL: redis://redis:6379/0
+  AGENTFORGE_SANDBOX_URL: http://sandbox:8001
+  AGENTFORGE_CORS_ORIGINS: ${AGENTFORGE_CORS_ORIGINS:-["http://localhost:8080"]}
+  AGENTFORGE_OPENAI_KEY: ${AGENTFORGE_OPENAI_KEY:-}
+  AGENTFORGE_OPENAI_MODEL: ${AGENTFORGE_OPENAI_MODEL:-gpt-4.1-mini}
+  AGENTFORGE_GEMINI_KEY: ${AGENTFORGE_GEMINI_KEY:-}
+  AGENTFORGE_GEMINI_MODEL: ${AGENTFORGE_GEMINI_MODEL:-gemini-2.5-flash}
+  AGENTFORGE_OPENAI_INPUT_RATE: ${AGENTFORGE_OPENAI_INPUT_RATE:-1.0}
+  AGENTFORGE_OPENAI_OUTPUT_RATE: ${AGENTFORGE_OPENAI_OUTPUT_RATE:-5.0}
+  AGENTFORGE_GEMINI_INPUT_RATE: ${AGENTFORGE_GEMINI_INPUT_RATE:-1.0}
+  AGENTFORGE_GEMINI_OUTPUT_RATE: ${AGENTFORGE_GEMINI_OUTPUT_RATE:-5.0}
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: agentforge
+      POSTGRES_DB: agentforge
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Generate .env}
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    networks: [control]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U agentforge -d agentforge"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    mem_limit: 512m
+    pids_limit: 128
+
+  redis:
+    image: redis:7-alpine
+    command: [redis-server, --maxmemory, 64mb, --maxmemory-policy, noeviction, --appendonly, "no"]
+    networks: [control]
+    restart: unless-stopped
+    read_only: true
+    user: "999:999"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    mem_limit: 128m
+    pids_limit: 32
+
+  migrate:
+    <<: *app
+    restart: "no"
+    command: [alembic, upgrade, head]
+    environment: *runtime-env
+    depends_on:
+      postgres: {condition: service_healthy}
+
+  tool-image:
+    image: agentforge-tool:local
+    build: ./sandbox
+    command: [python, -c, "print('Tool image ready')"]
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 64m
+    pids_limit: 16
+    restart: "no"
+
+  sandbox:
+    <<: *app
+    command: [uvicorn, "agentforge.sandbox:create_app", --factory, --host, "0.0.0.0", --port, "8001", --no-access-log]
+    environment:
+      AGENTFORGE_SANDBOX_KEY: ${AGENTFORGE_SANDBOX_KEY}
+      AGENTFORGE_TOOL_IMAGE: agentforge-tool:local
+    volumes: [/var/run/docker.sock:/var/run/docker.sock]
+    group_add: ["${DOCKER_GID:-0}"]
+    depends_on:
+      tool-image: {condition: service_completed_successfully}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=5)"]
+      interval: 5s
+      timeout: 6s
+      retries: 15
+
+  api:
+    <<: *app
+    environment: *runtime-env
+    ports: ["127.0.0.1:8000:8000"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready', timeout=3)"]
+      interval: 5s
+      timeout: 4s
+      retries: 15
+
+  worker:
+    <<: *app
+    command: [python, -m, agentforge.worker]
+    environment: *runtime-env
+    stop_grace_period: 20s
+    depends_on:
+      api: {condition: service_healthy}
+      sandbox: {condition: service_healthy}
+
+  frontend:
+    image: agentforge-frontend:local
+    build: ./frontend
+    ports: ["127.0.0.1:8080:8080"]
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp:size=16m,noexec,nosuid,nodev]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+    pids_limit: 32
+    networks: [control]
+    depends_on:
+      api: {condition: service_healthy}
+
+volumes:
+  postgres-data:
+networks:
+  control:
