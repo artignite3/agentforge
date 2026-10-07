@@ -48,6 +48,14 @@ class Store:
         self.engine = create_async_engine(settings.database_url, pool_pre_ping=True)
         self.sessions = async_sessionmaker(self.engine, expire_on_commit=False)
 
+    async def _close_started(self, session: AsyncSession, run: Run, status: Status) -> None:
+        steps = await session.scalars(
+            select(Step).where(Step.run_id == run.id, Step.status == "STARTED")
+        )
+        for step in steps:
+            step.status = status.value
+            step.error_type = status.value
+
     async def create_schema(self) -> None:
         """Test/local helper; production startup uses Alembic migrations."""
         async with self.engine.begin() as connection:
@@ -220,6 +228,7 @@ class Store:
                 run.cancel_requested = True
                 # Fence immediately: in-flight external work cannot commit after cancellation.
                 set_status(session, run, Status.CANCELLED)
+                await self._close_started(session, run, Status.CANCELLED)
             return as_dict(run)
 
     async def claim(self) -> tuple[str, str] | None:
@@ -240,6 +249,7 @@ class Store:
                 return None
             if run.deadline <= now:
                 set_status(session, run, Status.TIMED_OUT)
+                await self._close_started(session, run, Status.TIMED_OUT)
                 return None
             if run.status == "RUNNING":
                 run.recoveries += 1
@@ -283,6 +293,7 @@ class Store:
             run = await self._fenced(session, run_id, token)
             if run.deadline <= time.time():
                 set_status(session, run, Status.TIMED_OUT)
+                await self._close_started(session, run, Status.TIMED_OUT)
                 return
             run.lease_until = time.time() + self.settings.lease_seconds
 
@@ -377,7 +388,7 @@ class Store:
             if step is None or step.run_id != run.id or step.status != "STARTED":
                 raise LeaseLost()
             if actual_cost is not None and actual_tokens is not None:
-                # If a provider exceeds the estimate, keep the real charge and fail on next admission.
+                # Record actual usage; an over-limit result terminates below before further work.
                 run.spent_microusd += actual_cost - step.cost_microusd
                 run.charged_tokens += actual_tokens - step.tokens
                 step.cost_microusd = actual_cost
@@ -440,6 +451,7 @@ class Store:
                 status, output, error = Status.TIMED_OUT, None, "DeadlineExceeded"
             run.output, run.error_type = output, error
             set_status(session, run, status, error_type=error)
+            await self._close_started(session, run, status)
 
     async def prior_failures(self, run_id: str, sequence: int) -> list[str]:
         async with self.sessions() as session:

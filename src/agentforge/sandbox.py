@@ -25,7 +25,9 @@ CONTAINER_TMP = "/tmp"  # nosec B108
 
 
 class SandboxSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="AGENTFORGE_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_prefix="AGENTFORGE_", env_file=".env", extra="ignore", hide_input_in_errors=True
+    )
     sandbox_key: SecretStr = Field(default=SecretStr(""), min_length=32)
     tool_image: str = "agentforge-tool:local"
 

@@ -112,6 +112,34 @@ async def test_timeout_and_retryable_provider_failure(store, settings, owner):
     assert (await store.get_run(owner, run["id"]))["status"] == "TIMED_OUT"
 
 
+async def test_cancellation_during_tool_fences_result_and_cancels_wait(store, settings, owner):
+    class SlowTools:
+        def __init__(self):
+            self.started = asyncio.Event()
+            self.cancelled = asyncio.Event()
+
+        async def execute(self, request):
+            self.started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                self.cancelled.set()
+
+    run = await submit(store, owner)
+    tools = SlowTools()
+    task = asyncio.create_task(
+        Runtime(store, Router(settings), tools).execute(*(await store.claim()))
+    )
+    await asyncio.wait_for(tools.started.wait(), timeout=5)
+    await store.cancel(owner, run["id"])
+    await asyncio.wait_for(task, timeout=3)
+    assert tools.cancelled.is_set()
+    trace = await store.trace(owner, run["id"])
+    assert trace["run"]["status"] == "CANCELLED"
+    assert trace["run"]["checkpoint_seq"] == 1
+    assert trace["steps"][-1]["status"] == "CANCELLED"
+
+
 @pytest.mark.docker
 @pytest.mark.skipif(os.getenv("RUN_DOCKER_TESTS") != "1", reason="Set RUN_DOCKER_TESTS=1")
 async def test_real_full_runtime(store, settings, owner):

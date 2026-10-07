@@ -72,3 +72,15 @@ async def test_retries_are_bounded(store, owner):
         await store.fail_step(run_id, token, step["id"], "ProviderTransportError", 0, True)
     assert (await store.get_run(owner, run_id))["status"] == "FAILED"
     assert await store.claim() is None
+
+
+async def test_actual_usage_over_limit_fails_before_finish(store, owner):
+    await new_run(store, owner, budget_usd=0.0001)
+    run_id, token = await store.claim()
+    _, _, cp = await store.context(run_id, token)
+    step = await store.start_step(run_id, token, "model", cost=50, tokens=1)
+    await store.finish_step(run_id, token, step["id"], cp, {}, 1, actual_cost=200, actual_tokens=1)
+    result = await store.get_run(owner, run_id)
+    assert result["status"] == "FAILED"
+    assert result["spent_microusd"] == 200
+    assert result["error_type"] == "ProviderUsageExceededReservation"
