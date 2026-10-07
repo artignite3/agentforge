@@ -1,10 +1,9 @@
 """Submit a genuine API job and print a compact, inspectable execution trace."""
 
 import argparse
-import os
 
 from agentforge import Agent, AgentForge
-from agentforge.config import get_settings
+from agentforge.sdk import api_key_from_environment
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--url", default="http://localhost:8000")
@@ -12,8 +11,7 @@ parser.add_argument("--provider", choices=["demo", "auto", "openai", "gemini"], 
 parser.add_argument("--fixture", choices=["mean", "clamp"], default="mean")
 args = parser.parse_args()
 
-settings = get_settings()
-key = os.getenv("AGENTFORGE_API_KEY") or settings.api_key.get_secret_value()
+key = api_key_from_environment()
 with AgentForge(api_key=key, base_url=args.url) as client:
     agent = Agent(name="repo-engineer-" + args.provider, provider=args.provider)
     run = client.run(

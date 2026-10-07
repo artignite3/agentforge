@@ -5,14 +5,14 @@ import subprocess
 import time
 
 from agentforge import Agent, AgentForge
-from agentforge.config import get_settings
+from agentforge.sdk import api_key_from_environment
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--url", default="http://localhost:8000")
     args = parser.parse_args()
-    with AgentForge(get_settings().api_key.get_secret_value(), args.url) as client:
+    with AgentForge(api_key_from_environment(), args.url) as client:
         agent = Agent(name="chaos-repo-engineer", provider="demo", timeout=120)
         run = client.run(
             agent, "Repair the mean fixture while the worker is killed after checkpoint four."

@@ -4,9 +4,26 @@ import time
 from typing import Any, Literal
 
 import httpx
+from pydantic import SecretStr
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from agentforge.domain import TERMINAL, Agent, RunCreate, Status
 from agentforge.models import uid
+
+
+class _ClientSettings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_prefix="AGENTFORGE_", env_file=".env", extra="ignore", hide_input_in_errors=True
+    )
+    api_key: SecretStr = SecretStr("")
+
+
+def api_key_from_environment() -> str:
+    """Load client credentials without requiring the server's database configuration."""
+    key = _ClientSettings().api_key.get_secret_value()
+    if len(key) < 32:
+        raise ValueError("Set AGENTFORGE_API_KEY or generate .env before running the client")
+    return key
 
 
 class AgentForge:
