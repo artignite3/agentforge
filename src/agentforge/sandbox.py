@@ -21,6 +21,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from agentforge.domain import ToolRequest, ToolResult
 from agentforge.security import BodyLimit
 
+CONTAINER_TMP = "/tmp"  # nosec B108
+
 
 class SandboxSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="AGENTFORGE_", env_file=".env", extra="ignore")
@@ -47,7 +49,7 @@ def container_options(request: ToolRequest, image: str) -> dict[str, Any]:
         "pids_limit": 32,
         "tmpfs": {
             "/workspace": "rw,noexec,nosuid,nodev,size=2m,uid=10001,gid=10001,mode=700",
-            "/tmp": "rw,noexec,nosuid,nodev,size=8m,mode=1777",  # nosec B108
+            CONTAINER_TMP: "rw,noexec,nosuid,nodev,size=8m,mode=1777",
         },
         "working_dir": "/workspace",
         "environment": {"PYTHONDONTWRITEBYTECODE": "1", "PYTHONUNBUFFERED": "1"},
