@@ -1,0 +1,4 @@
+[
+  {"id":"mean-regression","fixture":"mean","task":"Repair the mean function. Preserve the original tests and verify the result."},
+  {"id":"clamp-boundaries","fixture":"clamp","task":"Repair the clamp function for inputs below, inside, and above the interval. Preserve and rerun tests."}
+]

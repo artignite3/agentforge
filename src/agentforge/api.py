@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from typing import Annotated, Any
 from uuid import UUID
 
+import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -124,6 +125,14 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
 
     @app.get("/v1/system", dependencies=[Depends(authenticate)])
     async def system() -> dict[str, Any]:
+        sandbox_ready = False
+        try:
+            async with httpx.AsyncClient(timeout=4, trust_env=False) as client:
+                sandbox_ready = (
+                    await client.get(config.sandbox_url + "/health")
+                ).status_code == 200
+        except httpx.HTTPError:
+            pass
         return {
             "environment": config.environment,
             "queue": "postgresql"
@@ -131,6 +140,7 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
             else "sqlite-single-worker",
             "providers": router.catalog(),
             "sandbox": "private Docker gateway",
+            "sandbox_ready": sandbox_ready,
             "semantics": "at-least-once execution; fenced checkpoint commits",
         }
 

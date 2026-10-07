@@ -395,6 +395,15 @@ class Store:
                 duration_ms=duration_ms,
                 checkpoint=run.checkpoint_seq,
             )
+            agent = await session.get(AgentRow, run.agent_id)
+            if agent is None:
+                raise StoreError("Agent configuration missing")
+            if (
+                run.spent_microusd > round(agent.config["budget_usd"] * 1_000_000)
+                or run.charged_tokens > agent.config["max_tokens"]
+            ):
+                run.error_type = "ProviderUsageExceededReservation"
+                set_status(session, run, Status.FAILED, error_type=run.error_type)
 
     async def fail_step(
         self, run_id: str, token: str, step_id: str, error_type: str, delay: float, retryable: bool

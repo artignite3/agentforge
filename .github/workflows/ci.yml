@@ -1,0 +1,46 @@
+name: CI
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env: {POSTGRES_USER: test, POSTGRES_PASSWORD: test, POSTGRES_DB: agentforge_test}
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U test -d agentforge_test" --health-interval 3s --health-retries 20
+    env:
+      POSTGRES_TEST_URL: postgresql+asyncpg://test:test@localhost:5432/agentforge_test
+      RUN_DOCKER_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with: {enable-cache: true, python-version: "3.11"}
+      - run: uv sync --frozen --extra dev
+      - run: uv run ruff check src tests sandbox migrations scripts evals
+      - run: uv run ruff format --check src tests sandbox migrations scripts evals
+      - run: uv run mypy src/agentforge
+      - run: uv run bandit -r src sandbox -q
+      - run: uv run pip-audit --local --skip-editable --progress-spinner off
+      - run: docker build -t agentforge-tool:local sandbox
+      - run: uv run pytest -q
+      - run: python scripts/bootstrap.py && uv run alembic upgrade head && uv run alembic check
+      - run: docker build -t agentforge-app:ci .
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: "24", cache: npm, cache-dependency-path: frontend/package-lock.json}
+      - run: npm ci --no-fund
+        working-directory: frontend
+      - run: npm run build && npm audit
+        working-directory: frontend
+      - run: docker build -t agentforge-frontend:ci frontend
