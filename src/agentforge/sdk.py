@@ -1,7 +1,7 @@
 """Small synchronous SDK; submission is async on the server, waiting is optional."""
 
 import time
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 
@@ -41,10 +41,14 @@ class AgentForge:
         return self._request("POST", "/v1/agents", agent.model_dump())
 
     def run(
-        self, agent: Agent, task: str, fixture: str = "mean", idempotency_key: str | None = None
+        self,
+        agent: Agent,
+        task: str,
+        fixture: Literal["mean", "clamp"] = "mean",
+        idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         registered = self.register(agent)
-        spec = RunCreate(agent_id=registered["id"], task=task, fixture=fixture)  # type: ignore[arg-type]
+        spec = RunCreate(agent_id=registered["id"], task=task, fixture=fixture)
         return self._request("POST", "/v1/runs", spec.model_dump(), idempotency_key or uid())
 
     def get(self, run_id: str) -> dict[str, Any]:

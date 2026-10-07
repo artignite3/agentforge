@@ -6,11 +6,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="AGENTFORGE_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_prefix="AGENTFORGE_", env_file=".env", extra="ignore", hide_input_in_errors=True
+    )
 
     environment: Literal["development", "production", "test"] = "development"
-    database_url: str = "sqlite+aiosqlite:///./agentforge.db"
-    redis_url: str = ""
+    database_url: str = Field(default="sqlite+aiosqlite:///./agentforge.db", repr=False)
+    redis_url: str = Field(default="", repr=False)
     api_key: SecretStr = SecretStr("")
     sandbox_key: SecretStr = SecretStr("")
     sandbox_url: str = "http://127.0.0.1:8001"

@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import secrets
 import time
@@ -28,12 +29,21 @@ class BodyLimit:
             return
         messages: list[Message] = []
         size = 0
+        deadline = time.monotonic() + 10
         while True:
-            message = await receive()
+            try:
+                message = await asyncio.wait_for(
+                    receive(), timeout=max(0, deadline - time.monotonic())
+                )
+            except TimeoutError:
+                await JSONResponse({"detail": "Request body timeout"}, status_code=408)(
+                    scope, receive, send
+                )
+                return
             if message["type"] == "http.disconnect":
                 return
             size += len(message.get("body", b""))
-            if size > self.limit:
+            if size > self.limit or len(messages) >= 1024:
                 await JSONResponse({"detail": "Request body exceeds limit"}, status_code=413)(
                     scope, receive, send
                 )

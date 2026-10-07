@@ -76,7 +76,12 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Cache-Control"] = "no-store"
         elapsed = time.monotonic() - started
-        REQUESTS.labels(request.method, str(response.status_code)).inc()
+        method = (
+            request.method
+            if request.method in {"GET", "POST", "OPTIONS", "HEAD", "PUT", "PATCH", "DELETE"}
+            else "OTHER"
+        )
+        REQUESTS.labels(method, str(response.status_code)).inc()
         LATENCY.observe(elapsed)
         log(
             "api",

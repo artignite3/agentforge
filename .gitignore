@@ -18,3 +18,7 @@ frontend/dist/
 evals/results/
 playwright-report/
 test-results/
+*.tsbuildinfo
+docs/
+DEPLOYMENT.md
+.history
