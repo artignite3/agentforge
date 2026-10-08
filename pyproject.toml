@@ -23,6 +23,7 @@ packages = ["src/agentforge"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+pythonpath = ["."]
 markers = ["docker: requires a running Docker engine and tool image", "postgres: requires PostgreSQL"]
 
 [tool.ruff]
