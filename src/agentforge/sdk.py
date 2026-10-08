@@ -33,6 +33,7 @@ class AgentForge:
             headers={"Authorization": "Bearer " + api_key},
             timeout=10,
             follow_redirects=False,
+            trust_env=False,
         )
 
     def close(self) -> None:

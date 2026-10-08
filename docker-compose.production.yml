@@ -1,0 +1,38 @@
+# Requires Docker Compose >=2.24.4 for !reset. Always combine with docker-compose.yml.
+x-production: &production
+  AGENTFORGE_ENVIRONMENT: production
+  # The dashboard and /api share one HTTPS origin; no cross-origin browser access needed.
+  AGENTFORGE_CORS_ORIGINS: "[]"
+
+services:
+  api:
+    ports: !reset []
+    environment: *production
+  worker:
+    environment: *production
+  migrate:
+    environment: *production
+  frontend:
+    ports: !reset []
+  edge:
+    image: agentforge-edge:local
+    build: ./deploy
+    environment:
+      AGENTFORGE_DOMAIN: ${AGENTFORGE_DOMAIN:?Run scripts/prepare_deploy.py with your domain}
+    ports: ["80:8081", "443:8443"]
+    volumes: [caddy-data:/data, caddy-config:/config]
+    networks: [control]
+    depends_on:
+      frontend: {condition: service_started}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: ["/tmp:size=16m,noexec,nosuid,nodev"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 32
+
+volumes:
+  caddy-data:
+  caddy-config:
