@@ -34,7 +34,7 @@ jobs:
       - run: python scripts/bootstrap.py && uv run alembic upgrade head && uv run alembic check
       - run: docker build -t agentforge-app:ci .
       - run: docker build -t agentforge-edge:ci deploy
-      - run: docker run --rm --network none -e AGENTFORGE_DOMAIN=forge.project.dev agentforge-edge:ci caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+      - run: docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges -e AGENTFORGE_DOMAIN=forge.project.dev agentforge-edge:ci caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
   frontend:
     runs-on: ubuntu-latest
     steps:
