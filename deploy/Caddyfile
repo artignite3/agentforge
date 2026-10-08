@@ -1,0 +1,19 @@
+{
+    admin off
+    http_port 8081
+    https_port 8443
+    servers {
+        timeouts {
+            read_header 10s
+            read_body 15s
+            write 30s
+            idle 60s
+        }
+    }
+}
+
+{$AGENTFORGE_DOMAIN} {
+    encode zstd gzip
+    header Strict-Transport-Security "max-age=31536000"
+    reverse_proxy frontend:8080
+}

@@ -9,3 +9,6 @@
 *.db
 evals/results
 test-results
+backups
+*.dump
+.release-venv
