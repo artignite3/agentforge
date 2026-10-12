@@ -8,6 +8,7 @@ def test_router_cost_fallback_and_explicit_preference(settings):
     settings.openai_key = settings.api_key
     settings.gemini_key = settings.api_key
     settings.gemini_input_rate = 0.5
+    settings.gemini_output_rate = 1.0
     router = Router(settings)
     agent = Agent(provider="auto")
     assert router.select(agent, "hello", 1000000, []).provider == "gemini"

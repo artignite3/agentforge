@@ -52,6 +52,8 @@ The startup sequence builds the tool image, starts PostgreSQL/Redis, applies Ale
 
 To use a live model, set `AGENTFORGE_OPENAI_KEY` or `AGENTFORGE_GEMINI_KEY` in `.env`, then recreate API and worker with `docker compose up -d`. Model IDs and conservative micro-USD/token estimates are configurable. The example rates are **operator estimates, not current provider pricing**. Verify availability and pricing for your own account.
 
+Gemini defaults to `gemini-3.8-flash`. The adapter uses its structured JSON response format and low thinking level, excludes thought summaries when parsing actions, and includes thinking tokens in output accounting. Existing Gemini 2.5 configurations retain their older request format, but new accounts may be denied access to those models. For an existing production deployment, update the model and rate fields in `.env.production` explicitly; a source update does not overwrite that private file. Non-rate-limit HTTP failures record only their status code, never upstream error bodies or keys.
+
 ## API example
 
 ```sh

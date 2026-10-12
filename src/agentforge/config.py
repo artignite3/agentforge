@@ -26,12 +26,12 @@ class Settings(BaseSettings):
     openai_key: SecretStr = SecretStr("")
     openai_model: str = "gpt-4.1-mini"
     gemini_key: SecretStr = SecretStr("")
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-3.8-flash"
     # Operator-supplied conservative rates, in micro-USD per token. Not live pricing.
     openai_input_rate: float = Field(default=1.0, gt=0)
     openai_output_rate: float = Field(default=5.0, gt=0)
-    gemini_input_rate: float = Field(default=1.0, gt=0)
-    gemini_output_rate: float = Field(default=5.0, gt=0)
+    gemini_input_rate: float = Field(default=1.5, gt=0)
+    gemini_output_rate: float = Field(default=8.0, gt=0)
 
     @model_validator(mode="after")
     def production_safety(self) -> "Settings":
