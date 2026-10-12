@@ -1,0 +1,146 @@
+[
+  {
+    "scene": 1,
+    "phrase": 0,
+    "text": "An agent starts a job.",
+    "startFrame": 8,
+    "endFrame": 53,
+    "tempo": 1.0
+  },
+  {
+    "scene": 1,
+    "phrase": 1,
+    "text": "A worker crashes.",
+    "startFrame": 56,
+    "endFrame": 91,
+    "tempo": 1.0
+  },
+  {
+    "scene": 1,
+    "phrase": 2,
+    "text": "What happens to the work already done?",
+    "startFrame": 94,
+    "endFrame": 153,
+    "tempo": 1.0
+  },
+  {
+    "scene": 2,
+    "phrase": 0,
+    "text": "Meet AgentForge.",
+    "startFrame": 220,
+    "endFrame": 250,
+    "tempo": 1.1219
+  },
+  {
+    "scene": 2,
+    "phrase": 1,
+    "text": "Durable execution for repository agents.",
+    "startFrame": 254,
+    "endFrame": 329,
+    "tempo": 1.1219
+  },
+  {
+    "scene": 2,
+    "phrase": 2,
+    "text": "Resume after worker failure, from the last committed checkpoint.",
+    "startFrame": 332,
+    "endFrame": 438,
+    "tempo": 1.1219
+  },
+  {
+    "scene": 3,
+    "phrase": 0,
+    "text": "Queue and state, together in PostgreSQL.",
+    "startFrame": 456,
+    "endFrame": 546,
+    "tempo": 1.0403
+  },
+  {
+    "scene": 3,
+    "phrase": 1,
+    "text": "Atomic checkpoints preserve progress.",
+    "startFrame": 550,
+    "endFrame": 616,
+    "tempo": 1.0403
+  },
+  {
+    "scene": 3,
+    "phrase": 2,
+    "text": "Fenced leases guard commits.",
+    "startFrame": 620,
+    "endFrame": 668,
+    "tempo": 1.0403
+  },
+  {
+    "scene": 3,
+    "phrase": 3,
+    "text": "Recorded provider routing.",
+    "startFrame": 671,
+    "endFrame": 714,
+    "tempo": 1.0403
+  },
+  {
+    "scene": 3,
+    "phrase": 4,
+    "text": "Isolated Docker tools.",
+    "startFrame": 717,
+    "endFrame": 763,
+    "tempo": 1.0403
+  },
+  {
+    "scene": 4,
+    "phrase": 0,
+    "text": "Submit a repair.",
+    "startFrame": 790,
+    "endFrame": 821,
+    "tempo": 1.0
+  },
+  {
+    "scene": 4,
+    "phrase": 1,
+    "text": "Follow the failing tests, the source change, and the verification.",
+    "startFrame": 824,
+    "endFrame": 955,
+    "tempo": 1.0
+  },
+  {
+    "scene": 4,
+    "phrase": 2,
+    "text": "Inspect model decisions, tool output, and saved checkpoints.",
+    "startFrame": 958,
+    "endFrame": 1075,
+    "tempo": 1.0
+  },
+  {
+    "scene": 5,
+    "phrase": 0,
+    "text": "Build agents for the failure path.",
+    "startFrame": 1120,
+    "endFrame": 1168,
+    "tempo": 1.223
+  },
+  {
+    "scene": 5,
+    "phrase": 1,
+    "text": "AgentForge.",
+    "startFrame": 1171,
+    "endFrame": 1194,
+    "tempo": 1.223
+  },
+  {
+    "scene": 5,
+    "phrase": 2,
+    "text": "Every run, accounted for.",
+    "startFrame": 1197,
+    "endFrame": 1248,
+    "tempo": 1.223
+  },
+  {
+    "scene": 5,
+    "phrase": 3,
+    "text": "Explore the project.",
+    "startFrame": 1252,
+    "endFrame": 1285,
+    "tempo": 1.223
+  }
+]

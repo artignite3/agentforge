@@ -1,0 +1,30 @@
+{
+  "name": "agentforge-cinematic-launch",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "render": "node scripts/render.mjs",
+    "stills": "node scripts/render.mjs --stills"
+  },
+  "dependencies": {
+    "@remotion/bundler": "4.0.535",
+    "@remotion/cli": "4.0.535",
+    "@remotion/renderer": "4.0.535",
+    "@remotion/three": "4.0.535",
+    "@react-three/fiber": "^9.4.0",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "remotion": "4.0.535",
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@types/three": "^0.180.0",
+    "typescript": "~5.9.2"
+  }
+}

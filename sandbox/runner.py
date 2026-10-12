@@ -31,7 +31,6 @@ def checked_path(name: str) -> Path:
 
 def run_tests() -> dict:
     # Fixed argv, no shell; the executable resolves to this container's interpreter.
-    # Fixed argv inside an isolated container; never executes on the host.
     process = subprocess.Popen(  # nosec B603
         [sys.executable, "-B", "-m", "unittest", "discover", "-s", ".", "-p", "test_*.py", "-v"],
         cwd="/workspace",

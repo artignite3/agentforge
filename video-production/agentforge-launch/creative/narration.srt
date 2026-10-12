@@ -1,0 +1,71 @@
+1
+00:00:00,267 --> 00:00:01,767
+An agent starts a job.
+
+2
+00:00:01,867 --> 00:00:03,033
+A worker crashes.
+
+3
+00:00:03,133 --> 00:00:05,100
+What happens to the work already done?
+
+4
+00:00:07,333 --> 00:00:08,333
+Meet AgentForge.
+
+5
+00:00:08,467 --> 00:00:10,967
+Durable execution for repository agents.
+
+6
+00:00:11,067 --> 00:00:14,600
+Resume after worker failure, from the last committed checkpoint.
+
+7
+00:00:15,200 --> 00:00:18,200
+Queue and state, together in PostgreSQL.
+
+8
+00:00:18,333 --> 00:00:20,533
+Atomic checkpoints preserve progress.
+
+9
+00:00:20,667 --> 00:00:22,267
+Fenced leases guard commits.
+
+10
+00:00:22,367 --> 00:00:23,800
+Recorded provider routing.
+
+11
+00:00:23,900 --> 00:00:25,433
+Isolated Docker tools.
+
+12
+00:00:26,333 --> 00:00:27,367
+Submit a repair.
+
+13
+00:00:27,467 --> 00:00:31,833
+Follow the failing tests, the source change, and the verification.
+
+14
+00:00:31,933 --> 00:00:35,833
+Inspect model decisions, tool output, and saved checkpoints.
+
+15
+00:00:37,333 --> 00:00:38,933
+Build agents for the failure path.
+
+16
+00:00:39,033 --> 00:00:39,800
+AgentForge.
+
+17
+00:00:39,900 --> 00:00:41,600
+Every run, accounted for.
+
+18
+00:00:41,733 --> 00:00:42,833
+Explore the project.

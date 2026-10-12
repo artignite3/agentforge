@@ -1,7 +1,22 @@
+# Credentials and operator state
 .env
 .env.*
 !.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+service-account*.json
+.local/
+backups/
+*.dump
+*.db
+*.db-*
+
+# Installed dependencies and build caches
 .venv/
+.release-venv/
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -12,16 +27,21 @@ __pycache__/
 htmlcov/
 node_modules/
 frontend/dist/
-*.db
-*.db-*
-.local/
+*.tsbuildinfo
+.history/
+
+# Local reports, evaluations, and production intermediates
 evals/results/
 playwright-report/
 test-results/
-*.tsbuildinfo
 docs/
 DEPLOYMENT.md
-.history
-backups/
-*.dump
-.release-venv/
+*.log
+/video-production/*/out/
+/video-production/*/work/
+/video-production/*/.tools/
+/video-production/*/.remotion/
+/video-production/*/PREPRODUCTION.md
+/video-production/*/MOTION_DESIGN_REPORT.md
+/video-production/*/narration.proposed.txt
+/video-production/*/storyboard.proposed.json

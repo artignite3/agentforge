@@ -4,6 +4,12 @@
 
 Agent frameworks make it easy to start a loop. AgentForge focuses on what happens when that loop fails: leases expire, requests are duplicated, providers become unavailable, and tools exceed their limits. The demo agent repairs a bundled Python repository through real disposable Docker containers.
 
+## Launch film
+
+[![AgentForge — Built for the failure path](assets/media/agentforge-launch-poster.jpg)](assets/media/Project_Launch_Cinematic.mp4)
+
+[Watch or download the 45-second launch film](assets/media/Project_Launch_Cinematic.mp4). Built with Remotion, React, TypeScript, and procedural Three.js geometry at 1920 × 1080 / 30 fps. It follows worker failure, checkpoint recovery, the execution architecture, and an inspectable repair. See the [film source and rendering instructions](video-production/agentforge-launch/README.md).
+
 ## Public deployment and live-model evidence
 
 Dashboard: https://agentforge-artignite3.indiasouthcentral.cloudapp.azure.com
@@ -104,13 +110,38 @@ The SDK submits immediately; `wait()` is optional and has its own local timeout.
 
 ## Dashboard
 
-The dashboard uses live API data and keeps its API key only in memory. It provides Overview, Runs, Run details, Agents, Providers, and System health. Model and tool outputs are rendered as text, never HTML. Local visual captures are saved under `docs/screenshots/`, currently excluded by this checkout's Git rules.
+The dashboard uses live API data and keeps its API key only in memory. It provides Overview, Runs, Run details, Agents, Providers, and System health. Model and tool outputs are rendered as text, never HTML.
+
+## Repository layout
+
+```text
+src/agentforge/                  API, runtime, providers, persistence, and SDK
+frontend/                       React dashboard and its image build
+sandbox/                        Isolated tool runner and its image build
+migrations/                     Alembic database migrations
+deploy/                         HTTPS edge and production deployment guide
+scripts/                        Bootstrap, deployment, backup, and release tools
+tests/                          Unit and integration tests
+evals/                          Evaluation dataset and runner
+assets/media/                   Finished launch film and README poster
+video-production/agentforge-launch/
+  src/                          Remotion composition and motion components
+  creative/                     Approved narration, subtitles, and storyboard
+  public/                       Bundled fonts, audio, and dashboard references
+  licenses/                     Asset licenses and provenance
+  scripts/                      Rendering and asset preparation tools
+```
+
+Root configuration defines the Python package, Compose services, migrations, and CI. The dashboard and film have independent npm lockfiles. The film is an optional production package and is excluded from application Docker images.
+
+Credentials, databases, backups, installed dependencies, local reports, and render intermediates are ignored by Git. Put private operational material under `.local/`; film renders and checks write to the ignored `out/`, and audio preparation writes intermediates to the ignored `work/`. Only the curated finished film and poster belong in `assets/media/`. Docker build contexts allow only the inputs needed by each image.
 
 ## Verification
 
 ```sh
 uv sync --frozen --extra dev
 uv run ruff check src tests sandbox migrations scripts evals
+uv run ruff check video-production/agentforge-launch/scripts
 uv run mypy src/agentforge
 uv run pytest -q
 uv run bandit -r src sandbox -q
@@ -138,7 +169,7 @@ External provider calls can execute more than once across a crash or ambiguous t
 
 Start with the [step-by-step hosting guide](deploy/README.md). The production override adds a non-root Caddy HTTPS edge, removes direct API/frontend host ports, and uses a separately generated `.env.production`. Preflight/release verification and binary-safe backup helpers are included. The guide covers student-credit hosting, DNS, SSH, firewall rules, deployment, verification, restoration, and rollback.
 
-The complete Docker gateway needs a Docker-capable host; ordinary serverless application hosting is insufficient for that component. On a dedicated Linux VM, generate `.env`, set the socket group, configure `AGENTFORGE_ENVIRONMENT=production` and exact HTTPS origins, start Compose, and reverse-proxy localhost:8080 behind TLS. Keep database/Redis/gateway ports private. Back up the PostgreSQL volume with `pg_dump` and test restoration. Detailed deployment notes are in the local `DEPLOYMENT.md`, currently excluded by this checkout's Git rules.
+The complete Docker gateway needs a Docker-capable host; ordinary serverless application hosting is insufficient for that component. On a dedicated Linux VM, generate `.env`, set the socket group, configure `AGENTFORGE_ENVIRONMENT=production` and exact HTTPS origins, start Compose, and reverse-proxy localhost:8080 behind TLS. Keep database/Redis/gateway ports private. Back up the PostgreSQL volume with `pg_dump` and test restoration.
 
 CI runs lint, type checking, unit tests, real PostgreSQL/Docker tests, dependency/security checks, migrations, and image builds. Public deployment still requires an operator-owned host/domain and credentials. A local Compose success alone does not establish production readiness.
 
@@ -157,5 +188,3 @@ CI runs lint, type checking, unit tests, real PostgreSQL/Docker tests, dependenc
 ## Scope and future work
 
 This is a **portfolio-oriented production baseline**, not enterprise production software. Deferred work: general repositories, shell/Python tools, streaming model tokens/SSE, user accounts and RBAC, distributed circuit breakers, tracing exporters, retention enforcement, arbitrary checkpoint replay, gVisor/Firecracker, learned routing, and larger semantic evaluations.
-
-The practical build plan, original idea comparison, release checklist, validation record, and screenshots are retained locally under `docs/`. This checkout currently ignores that directory in Git.
