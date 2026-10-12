@@ -110,6 +110,8 @@ dc up -d --wait --wait-timeout 180
 dc ps
 ```
 
+The Python build uses a 120-second HTTP read timeout, five retries, and at most four concurrent downloads. These build arguments can be overridden with `dc build --build-arg UV_HTTP_TIMEOUT=180`; they do not change the locked dependencies or disable TLS checks. On a small VM, use `docker compose --parallel 1 --env-file .env.production -f docker-compose.yml -f docker-compose.production.yml build` to build services sequentially. If downloads still fail, capture a single application build with `docker build --progress=plain -t agentforge-app:local .` and inspect the underlying download error before changing packages or networking.
+
 Only the edge publishes 80/443. The API and frontend's development host ports are removed, rather than appended to production ports. Caddy runs as UID/GID 10001 on internal high ports; named volumes persist its certificate/account data. Its admin API and access logging are disabled. Application data APIs retain bearer authentication.
 
 The edge base image is pinned to the digest validated during this release. Review scans and deliberately update that digest as patches are released. Other existing stack images still use version tags; scan and pin the chosen release images before public-host signoff.
