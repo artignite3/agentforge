@@ -1,0 +1,17 @@
+AgentForge — approved narration (user: Start, October 13, 2026)
+45 seconds / 30 fps / 1350 frames
+
+Scene 1 — 0–7 seconds — frames [0, 210)
+An agent starts a job. A worker crashes. What happens to the work already done?
+
+Scene 2 — 7–15 seconds — frames [210, 450)
+Meet AgentForge. Durable execution for repository agents. Resume after worker failure, from the last committed checkpoint.
+
+Scene 3 — 15–26 seconds — frames [450, 780)
+Queue and state, together in PostgreSQL. Atomic checkpoints preserve progress. Fenced leases guard commits. Recorded provider routing. Isolated Docker tools.
+
+Scene 4 — 26–37 seconds — frames [780, 1110)
+Submit a repair. Follow the failing tests, the source change, and the verification. Inspect model decisions, tool output, and saved checkpoints.
+
+Scene 5 — 37–45 seconds — frames [1110, 1350)
+Build agents for the failure path. AgentForge. Every run, accounted for. Explore the project.

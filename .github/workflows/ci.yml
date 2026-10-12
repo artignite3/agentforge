@@ -24,8 +24,8 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with: {enable-cache: true, python-version: "3.11"}
       - run: uv sync --frozen --extra dev
-      - run: uv run ruff check src tests sandbox migrations scripts evals
-      - run: uv run ruff format --check src tests sandbox migrations scripts evals
+      - run: uv run ruff check src tests sandbox migrations scripts evals video-production/agentforge-launch/scripts
+      - run: uv run ruff format --check src tests sandbox migrations scripts evals video-production/agentforge-launch/scripts
       - run: uv run mypy src/agentforge
       - run: uv run bandit -r src sandbox -q
       - run: uv run pip-audit --local --skip-editable --progress-spinner off
@@ -46,3 +46,13 @@ jobs:
       - run: npm run build && npm audit
         working-directory: frontend
       - run: docker build -t agentforge-frontend:ci frontend
+  launch-source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: "24", cache: npm, cache-dependency-path: video-production/agentforge-launch/package-lock.json}
+      - run: npm ci --no-fund
+        working-directory: video-production/agentforge-launch
+      - run: npm run typecheck
+        working-directory: video-production/agentforge-launch

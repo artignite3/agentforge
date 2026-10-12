@@ -1,0 +1,205 @@
+{
+  "status": "approved",
+  "concept": "Built for the failure path",
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "durationInFrames": 1350,
+  "intervalConvention": "half-open",
+  "ctaUrl": null,
+  "scenes": [
+    {
+      "id": 1,
+      "start": 0,
+      "end": 210,
+      "speech": [
+        8,
+        153
+      ],
+      "title": "The interruption",
+      "beats": [
+        {
+          "start": 0,
+          "end": 60,
+          "action": "RUNNING / grid and execution path"
+        },
+        {
+          "start": 60,
+          "end": 108,
+          "action": "Worker interruption"
+        },
+        {
+          "start": 108,
+          "end": 180,
+          "action": "WHAT SURVIVES? / foreground fragmentation"
+        },
+        {
+          "start": 180,
+          "end": 210,
+          "action": "Compression into committed layers"
+        }
+      ],
+      "narration": "An agent starts a job. A worker crashes. What happens to the work already done?"
+    },
+    {
+      "id": 2,
+      "start": 210,
+      "end": 450,
+      "speech": [
+        220,
+        438
+      ],
+      "title": "The durable core",
+      "beats": [
+        {
+          "start": 210,
+          "end": 258,
+          "action": "Path registration / MEET"
+        },
+        {
+          "start": 258,
+          "end": 330,
+          "action": "AGENTFORGE / tracking and depth assembly"
+        },
+        {
+          "start": 330,
+          "end": 405,
+          "action": "Recovery under a fresh lease / condensed-time caption"
+        },
+        {
+          "start": 405,
+          "end": 450,
+          "action": "Camera through checkpoint aperture"
+        }
+      ],
+      "narration": "Meet AgentForge. Durable execution for repository agents. Resume after worker failure, from the last committed checkpoint."
+    },
+    {
+      "id": 3,
+      "start": 450,
+      "end": 780,
+      "speech": [
+        456,
+        763
+      ],
+      "title": "The execution contract",
+      "beats": [
+        {
+          "start": 450,
+          "end": 522,
+          "action": "Queue and state in PostgreSQL"
+        },
+        {
+          "start": 522,
+          "end": 597,
+          "action": "Atomic step, checkpoint, event commit"
+        },
+        {
+          "start": 597,
+          "end": 648,
+          "action": "Fenced commit gate"
+        },
+        {
+          "start": 648,
+          "end": 714,
+          "action": "Recorded OpenAI / Gemini routing"
+        },
+        {
+          "start": 714,
+          "end": 756,
+          "action": "Private gateway and disposable Docker tools"
+        },
+        {
+          "start": 756,
+          "end": 780,
+          "action": "Tool result path becomes UI timeline rail"
+        }
+      ],
+      "narration": "Queue and state, together in PostgreSQL. Atomic checkpoints preserve progress. Fenced leases guard commits. Recorded provider routing. Isolated Docker tools."
+    },
+    {
+      "id": 4,
+      "start": 780,
+      "end": 1110,
+      "speech": [
+        790,
+        1075
+      ],
+      "title": "The inspectable repair",
+      "beats": [
+        {
+          "start": 780,
+          "end": 834,
+          "action": "Source-accurate SDK to genuine interface"
+        },
+        {
+          "start": 834,
+          "end": 912,
+          "action": "Original failing clamp fixture tests"
+        },
+        {
+          "start": 912,
+          "end": 975,
+          "action": "Verified stats.py fixture repair"
+        },
+        {
+          "start": 975,
+          "end": 1038,
+          "action": "Verification and completed trace"
+        },
+        {
+          "start": 1038,
+          "end": 1080,
+          "action": "INSPECT THE WORK / FOLLOW THE TRACE"
+        },
+        {
+          "start": 1080,
+          "end": 1110,
+          "action": "Trace withdrawal / mark alignment"
+        }
+      ],
+      "narration": "Submit a repair. Follow the failing tests, the source change, and the verification. Inspect model decisions, tool output, and saved checkpoints."
+    },
+    {
+      "id": 5,
+      "start": 1110,
+      "end": 1350,
+      "speech": [
+        1120,
+        1285
+      ],
+      "title": "Every run, accounted for",
+      "beats": [
+        {
+          "start": 1110,
+          "end": 1152,
+          "action": "Checkpoint plates assemble layered mark"
+        },
+        {
+          "start": 1152,
+          "end": 1206,
+          "action": "Wordmark graphic, scale and tracking reveal"
+        },
+        {
+          "start": 1206,
+          "end": 1236,
+          "action": "Tagline and text-only CTA reveal"
+        },
+        {
+          "start": 1236,
+          "end": 1335,
+          "action": "Stable final lockup / voice ends"
+        },
+        {
+          "start": 1335,
+          "end": 1350,
+          "action": "Audio tail / visual hold / final cut"
+        }
+      ],
+      "narration": "Build agents for the failure path. AgentForge. Every run, accounted for. Explore the project."
+    }
+  ],
+  "editorialConformance": "Scene intervals and exact narration preserved. Typography and architectural cue starts conformed to generated voiceover. Source scene files define final visual state.",
+  "ctaText": "Explore the project",
+  "approvedDate": "2026-10-13"
+}

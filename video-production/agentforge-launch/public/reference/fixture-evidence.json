@@ -1,0 +1,28 @@
+{
+  "fixture": "clamp",
+  "capture": "Real disposable Docker containers via DockerExecutor",
+  "before": {
+    "stdout": "",
+    "stderr": "test_above (test_stats.ClampTests.test_above) ... FAIL\ntest_below (test_stats.ClampTests.test_below) ... ok\ntest_middle (test_stats.ClampTests.test_middle) ... FAIL\n\n======================================================================\nFAIL: test_above (test_stats.ClampTests.test_above)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/workspace/test_stats.py\", line 7, in test_above\n    def test_above(self): self.assertEqual(clamp(12, 0, 10), 10)\n                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 0 != 10\n\n======================================================================\nFAIL: test_middle (test_stats.ClampTests.test_middle)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/workspace/test_stats.py\", line 5, in test_middle\n    def test_middle(self): self.assertEqual(clamp(5, 0, 10), 5)\n                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 0 != 5\n\n----------------------------------------------------------------------\nRan 3 tests in 0.000s\n\nFAILED (failures=2)\n",
+    "exit_code": 1,
+    "duration_ms": 312,
+    "timeout_reason": null
+  },
+  "write": {
+    "stdout": "Updated stats.py in the isolated workspace.",
+    "stderr": "",
+    "exit_code": 0,
+    "duration_ms": 0,
+    "timeout_reason": null
+  },
+  "after": {
+    "stdout": "",
+    "stderr": "test_above (test_stats.ClampTests.test_above) ... ok\ntest_below (test_stats.ClampTests.test_below) ... ok\ntest_middle (test_stats.ClampTests.test_middle) ... ok\n\n----------------------------------------------------------------------\nRan 3 tests in 0.000s\n\nOK\n",
+    "exit_code": 0,
+    "duration_ms": 301,
+    "timeout_reason": null
+  },
+  "original_source": "def clamp(value, low, high):\n    return min(low, max(high, value))\n",
+  "repaired_source": "def clamp(value, low, high):\n    return max(low, min(high, value))\n",
+  "original_tests": "import unittest\nfrom stats import clamp\n\nclass ClampTests(unittest.TestCase):\n    def test_middle(self): self.assertEqual(clamp(5, 0, 10), 5)\n    def test_below(self): self.assertEqual(clamp(-2, 0, 10), 0)\n    def test_above(self): self.assertEqual(clamp(12, 0, 10), 10)\n"
+}
