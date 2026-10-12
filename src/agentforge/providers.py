@@ -113,15 +113,26 @@ class HTTPProvider:
         else:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.settings.gemini_model}:generateContent"
             headers = {"x-goog-api-key": self.settings.gemini_key.get_secret_value()}
-            body = {
-                "systemInstruction": {"parts": [{"text": SYSTEM}]},
-                "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-                "generationConfig": {
+            if self.settings.gemini_model.startswith("gemini-3"):
+                generation_config = {
+                    "maxOutputTokens": OUTPUT_LIMIT,
+                    "responseFormat": {
+                        "text": {"mimeType": "application/json", "schema": action_schema()}
+                    },
+                    "thinkingConfig": {"thinkingLevel": "low"},
+                }
+            else:
+                # Preserve the request contract for existing Gemini 2.5 accounts.
+                generation_config = {
                     "maxOutputTokens": OUTPUT_LIMIT,
                     "responseMimeType": "application/json",
                     "responseJsonSchema": action_schema(),
                     "thinkingConfig": {"thinkingBudget": 0},
-                },
+                }
+            body = {
+                "systemInstruction": {"parts": [{"text": SYSTEM}]},
+                "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+                "generationConfig": generation_config,
             }
         try:
             async with httpx.AsyncClient(
@@ -131,7 +142,9 @@ class HTTPProvider:
                 async with client.stream("POST", url, headers=headers, json=body) as response:
                     if response.status_code >= 400:
                         raise ProviderError(
-                            "RateLimited" if response.status_code == 429 else "ProviderHTTPError",
+                            "RateLimited"
+                            if response.status_code == 429
+                            else f"ProviderHTTPError{response.status_code}",
                             response.status_code in {408, 429} or response.status_code >= 500,
                         )
                     chunks = bytearray()
@@ -150,7 +163,11 @@ class HTTPProvider:
                 usage = data["usage"]
                 input_tokens, output_tokens = usage["input_tokens"], usage["output_tokens"]
             else:
-                value = data["candidates"][0]["content"]["parts"][0]["text"]
+                value = "".join(
+                    part.get("text", "")
+                    for part in data["candidates"][0]["content"]["parts"]
+                    if not part.get("thought", False)
+                )
                 usage = data["usageMetadata"]
                 input_tokens = usage["promptTokenCount"]
                 output_tokens = usage["totalTokenCount"] - input_tokens
