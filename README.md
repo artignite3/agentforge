@@ -54,6 +54,8 @@ To use a live model, set `AGENTFORGE_OPENAI_KEY` or `AGENTFORGE_GEMINI_KEY` in `
 
 Gemini defaults to `gemini-3.8-flash`. The adapter uses its structured JSON response format and low thinking level, excludes thought summaries when parsing actions, and includes thinking tokens in output accounting. Existing Gemini 2.5 configurations retain their older request format, but new accounts may be denied access to those models. For an existing production deployment, update the model and rate fields in `.env.production` explicitly; a source update does not overwrite that private file. Non-rate-limit HTTP failures record only their status code, never upstream error bodies or keys.
 
+The REST response format uses enum names (`APPLICATION_JSON`, `LOW`), rather than SDK-style MIME strings. Provider tests validate these values against a snapshot of Google's discovery schema; the legacy `responseMimeType` field still uses `application/json`.
+
 ## API example
 
 ```sh

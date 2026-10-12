@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import httpx
 import pytest
@@ -22,6 +23,9 @@ async def test_gemini_model_contract_and_thinking_token_accounting(settings, mon
     action = json.dumps(
         {"operation": "finish", "path": "", "content": "", "explanation": "Verified tests."}
     )
+    rest_enums = json.loads(
+        Path(__file__).with_name("fixtures").joinpath("gemini_rest_enums.json").read_text()
+    )
 
     def handler(request):
         assert request.url.host == "generativelanguage.googleapis.com"
@@ -31,9 +35,14 @@ async def test_gemini_model_contract_and_thinking_token_accounting(settings, mon
         config = json.loads(request.content)["generationConfig"]
         assert config["maxOutputTokens"] == OUTPUT_LIMIT
         if model.startswith("gemini-3"):
-            assert config["thinkingConfig"] == {"thinkingLevel": "low"}
+            assert config["thinkingConfig"] == {"thinkingLevel": "LOW"}
+            assert (
+                config["thinkingConfig"]["thinkingLevel"]
+                in rest_enums["ThinkingConfig"]["thinkingLevel"]
+            )
             output = config["responseFormat"]["text"]
-            assert output["mimeType"] == "application/json"
+            assert output["mimeType"] == "APPLICATION_JSON"
+            assert output["mimeType"] in rest_enums["TextResponseFormat"]["mimeType"]
             schema = output["schema"]
             assert "responseJsonSchema" not in config
         else:
