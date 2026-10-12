@@ -117,9 +117,9 @@ class HTTPProvider:
                 generation_config = {
                     "maxOutputTokens": OUTPUT_LIMIT,
                     "responseFormat": {
-                        "text": {"mimeType": "application/json", "schema": action_schema()}
+                        "text": {"mimeType": "APPLICATION_JSON", "schema": action_schema()}
                     },
-                    "thinkingConfig": {"thinkingLevel": "low"},
+                    "thinkingConfig": {"thinkingLevel": "LOW"},
                 }
             else:
                 # Preserve the request contract for existing Gemini 2.5 accounts.
