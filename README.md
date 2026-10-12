@@ -4,6 +4,14 @@
 
 Agent frameworks make it easy to start a loop. AgentForge focuses on what happens when that loop fails: leases expire, requests are duplicated, providers become unavailable, and tools exceed their limits. The demo agent repairs a bundled Python repository through real disposable Docker containers.
 
+## Public deployment and live-model evidence
+
+Dashboard: https://agentforge-artignite3.indiasouthcentral.cloudapp.azure.com
+
+The dashboard is publicly reachable; viewing execution data and submitting jobs requires the operator API key. On October 13, 2026, the Azure deployment completed a live Gemini 3.5 Flash-Lite repair (`0e9292f4-6623-4569-8772-68f7bd380c27`). Four model calls and three sandboxed tool calls reproduced failing tests, changed the mean denominator from `len(values) + 1` to `len(values)`, and passed the unchanged original tests. The saved trace reported 8.29 seconds, 2,445 accounted tokens, and $0.005371 estimated accounted cost using configured operator rates, not an invoice. This is one integration result, not a model-quality or performance benchmark.
+
+The model's written explanation incorrectly mentioned Python 2/integer division. Completion verifies the supplied regression tests; explanation accuracy is a separate evaluation criterion. Public-host crash recovery/isolation checks and image OS scanning remain additional hardening work. Database backup restoration, encrypted off-host transfer, host updates/reboot, and post-reboot execution have been verified separately.
+
 ## What works
 
 - Authenticated FastAPI control plane and a small Python SDK.
