@@ -103,18 +103,18 @@ export function RunModal({
     agents.find((a) => a.id === agentId)?.config.provider || provider;
   return (
     <Modal
-      title="Launch an execution"
-      subtitle="A bounded repository repair, with a complete trace."
+      title="New run"
+      subtitle="Repair a bundled fixture and verify it against its original tests"
       onClose={onClose}
     >
       <form onSubmit={submit}>
-        <label htmlFor="agent">AGENT CONFIGURATION</label>
+        <label htmlFor="agent">Agent</label>
         <select
           id="agent"
           value={agentId}
           onChange={(e) => setAgentId(e.target.value)}
         >
-          <option value="">Create default Repository Engineer</option>
+          <option value="">Create repo-engineer (default)</option>
           {agents.map((a) => (
             <option key={a.id} value={a.id}>
               {a.name} / {a.version} · {a.config.provider}
@@ -123,7 +123,7 @@ export function RunModal({
         </select>
         {!agentId && (
           <>
-            <label htmlFor="provider">PLANNER</label>
+            <label htmlFor="provider">Planner</label>
             <select
               id="provider"
               value={provider}
@@ -145,7 +145,7 @@ export function RunModal({
             </select>
           </>
         )}
-        <label htmlFor="fixture">REPOSITORY FIXTURE</label>
+        <label htmlFor="fixture">Repository fixture</label>
         <select
           id="fixture"
           value={fixture}
@@ -154,7 +154,7 @@ export function RunModal({
           <option value="mean">Statistics · incorrect mean</option>
           <option value="clamp">Statistics · boundary clamp</option>
         </select>
-        <label htmlFor="task">TASK</label>
+        <label htmlFor="task">Task</label>
         <textarea
           id="task"
           value={task}
@@ -214,11 +214,11 @@ export function AgentModal({
   return (
     <Modal
       title="Register an agent"
-      subtitle="Agent versions are immutable. Register a new version to change behavior."
+      subtitle="A version never changes once registered; register a new version to change it"
       onClose={onClose}
     >
       <form onSubmit={submit}>
-        <label htmlFor="name">NAME</label>
+        <label htmlFor="name">Name</label>
         <input
           id="name"
           value={name}
@@ -226,7 +226,7 @@ export function AgentModal({
           required
           maxLength={80}
         />
-        <label htmlFor="version">VERSION</label>
+        <label htmlFor="version">Version</label>
         <input
           id="version"
           value={version}
@@ -234,7 +234,7 @@ export function AgentModal({
           required
           maxLength={32}
         />
-        <label htmlFor="agent-provider">PROVIDER POLICY</label>
+        <label htmlFor="agent-provider">Provider</label>
         <select
           id="agent-provider"
           value={provider}

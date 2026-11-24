@@ -7,15 +7,12 @@ import {
 } from "react";
 import {
   Activity,
-  ArrowDownLeft,
   ArrowUpRight,
   Box,
-  ChevronDown,
   ChevronRight,
   Circle,
   Clock3,
   Cpu,
-  Database,
   GitBranch,
   Layers3,
   LayoutDashboard,
@@ -23,8 +20,6 @@ import {
   LockKeyhole,
   Plus,
   RefreshCw,
-  Server,
-  ShieldCheck,
   Unplug,
   Workflow,
   X,
@@ -45,6 +40,8 @@ import { Empty, Health } from "./components/ui";
 import { RunDetails } from "./components/RunDetails";
 import { RunsView } from "./components/RunsView";
 import { Modal, RunModal, AgentModal } from "./components/Dialogs";
+// Matches the API release (FastAPI app version and package.json).
+const VERSION = "0.2.0";
 type Page = "Overview" | "Runs" | "Agents" | "Providers" | "System health";
 export default function App() {
   const [page, setPage] = useState<Page>("Overview");
@@ -180,15 +177,6 @@ export default function App() {
           </span>
           agentforge<span className="brand-period">.</span>
         </button>
-        <div className="workspace">
-          <div className="workspace-avatar">AF</div>
-          <div>
-            <strong>Development</strong>
-            <span>Execution workspace</span>
-          </div>
-          <ChevronDown size={14} />
-        </div>
-        <div className="nav-label">CONTROL PLANE</div>
         <nav>
           {(
             [
@@ -210,16 +198,6 @@ export default function App() {
             </button>
           ))}
         </nav>
-        <div className="sidebar-note">
-          <div>
-            <ShieldCheck size={17} />
-            <span>Built for the failure path</span>
-          </div>
-          <p>Fenced leases. Durable checkpoints. Observable execution.</p>
-          <a href="/api/docs" target="_blank" rel="noreferrer">
-            Explore the API <ArrowUpRight size={13} />
-          </a>
-        </div>
         <div className="sidebar-bottom">
           <span className={`connection-dot ${api ? "online" : ""}`} />
           <span>{api ? "Workspace connected" : "Workspace disconnected"}</span>
@@ -231,7 +209,7 @@ export default function App() {
           </button>
         </div>
         <div className="version">
-          AGENTFORGE <span>v0.1.0</span>
+          AgentForge <span>v{VERSION}</span>
         </div>
       </aside>
 
@@ -251,9 +229,9 @@ export default function App() {
           <div className="topbar-right">
             <span className="environment">
               <span />
-              {system?.environment || "Local environment"}
-              {system &&
-                ` · ${system.principal.label} (${system.principal.role})`}
+              {system
+                ? `${system.environment} · ${system.principal.label} (${system.principal.role})`
+                : "Not connected"}
             </span>
             <button
               className="icon-button"
@@ -261,13 +239,6 @@ export default function App() {
               onClick={() => void refresh()}
             >
               <RefreshCw size={16} />
-            </button>
-            <button
-              className="avatar"
-              onClick={() => setConnectOpen(true)}
-              aria-label="Connection settings"
-            >
-              AF
             </button>
           </div>
         </header>
@@ -304,28 +275,19 @@ export default function App() {
             <>
               <div className="page-heading">
                 <div>
-                  <div className="eyebrow">AGENT EXECUTION PLATFORM</div>
-                  <h1>
-                    {page === "Overview"
-                      ? "Every run, accounted for."
-                      : page === "Runs"
-                        ? "Execution runs"
-                        : page === "Agents"
-                          ? "Your agent fleet"
-                          : page === "Providers"
-                            ? "Model routing"
-                            : "System health"}
-                  </h1>
+                  <h1>{page}</h1>
                   <p>
                     {page === "Overview"
-                      ? "Inspect the work. Understand the failures. Resume with confidence."
+                      ? api
+                        ? `${runs.length} recent runs, ${active} active`
+                        : "Connect with an API key to see your runs"
                       : page === "Runs"
-                        ? "Durable jobs, from submission through the last checkpoint."
+                        ? "Newest first. Open a run to see every step and checkpoint"
                         : page === "Agents"
-                          ? "Immutable configurations. Explicit limits. Reproducible behavior."
+                          ? "Versioned agent configurations. A version never changes once registered"
                           : page === "Providers"
-                            ? "Provider-neutral execution with visible, rules-based decisions."
-                            : "The dependencies behind reliable agent execution."}
+                            ? "Where model calls go and how auto routing chooses"
+                            : "Reported by the API and by live worker heartbeats"}
                   </p>
                 </div>
                 <button
@@ -403,12 +365,9 @@ export default function App() {
                       ))}
                     </div>
                   ) : (
-                    <Empty
-                      title="Give your runtime its first agent"
-                      icon={<Box size={27} />}
-                    >
-                      Register an immutable agent configuration or launch a run
-                      to create the default Repository Engineer.
+                    <Empty title="No agents yet" icon={<Box size={27} />}>
+                      Register an agent, or start a run to create the default
+                      repo-engineer.
                     </Empty>
                   )}
                 </section>
@@ -418,11 +377,12 @@ export default function App() {
                   <div className="notice">
                     <GitBranch size={17} />
                     <div>
-                      <strong>Simple routing. Visible decisions.</strong>
+                      <strong>How auto routing chooses</strong>
                       <p>
-                        Auto routing chooses the lowest estimated cost within
-                        budget, then prefers providers with fewer failed
-                        attempts. Every decision is recorded in the trace.
+                        Among configured providers within the remaining budget,
+                        it prefers the one with fewer failed attempts on this
+                        step, then the lower estimated cost. Each choice and its
+                        reason is saved on the step.
                       </p>
                     </div>
                   </div>
@@ -453,14 +413,18 @@ export default function App() {
                           <code>{p.model}</code>
                           <p>
                             {p.provider === "demo"
-                              ? "Scripted fixture planner. No model inference, token usage, or provider cost."
-                              : "Live provider adapter. Availability is established by actual requests; configuration alone is not a health check."}
+                              ? "Scripted planner for the bundled fixtures. No model calls, tokens, or cost."
+                              : p.configured
+                                ? "Key configured on the worker. Reachability shows up in run traces; it is not probed."
+                                : "No key configured on the worker. Explicit runs on this provider fail fast."}
                           </p>
                           <div className="provider-footer">
                             <Circle size={11} />
                             {p.health === "fixture"
-                              ? "Reproducible fixture"
-                              : "Health not probed"}
+                              ? "Deterministic"
+                              : p.health === "no_worker"
+                                ? "No live worker"
+                                : "Not probed"}
                           </div>
                         </section>
                       ))
@@ -476,24 +440,27 @@ export default function App() {
                 </>
               )}
               {page === "System health" && (
-                <div className="health-grid">
+                <section className="panel health-list">
                   <Health
-                    icon={<Server />}
-                    name="API / control plane"
-                    value={api ? "Connected" : "Disconnected"}
-                    detail="Authenticated REST API · automatic OpenAPI"
+                    name="API"
+                    value={api ? "Connected" : "Not connected"}
+                    detail="Authenticated REST API"
                     good={!!api}
                   />
                   <Health
-                    icon={<Database />}
-                    name="Durable queue"
+                    name="Queue"
                     value={system?.queue || "Unknown"}
-                    detail="Runs, leases, events, and checkpoints share one database."
+                    detail="Runs, leases, events, and checkpoints share one database"
                     good={!!system}
                   />
                   <Health
-                    icon={<ShieldCheck />}
-                    name="Tool isolation"
+                    name="Workers"
+                    value={system ? `${system.workers_alive} alive` : "Unknown"}
+                    detail="Each worker heartbeats every 5 s; with none alive, queued runs wait"
+                    good={(system?.workers_alive ?? 0) > 0}
+                  />
+                  <Health
+                    name="Tool sandbox"
                     value={
                       system
                         ? system.sandbox_ready
@@ -501,52 +468,37 @@ export default function App() {
                           : "Unavailable"
                         : "Unknown"
                     }
-                    detail="Gateway and tool image readiness, reported by live workers."
+                    detail="Gateway and tool image, as reported by live workers"
                     good={system?.sandbox_ready === true}
                   />
                   <Health
-                    icon={<Cpu />}
-                    name="Workers"
-                    value={system ? `${system.workers_alive} alive` : "Unknown"}
-                    detail="Workers heartbeat every 5 s; none alive means queued runs wait."
-                    good={(system?.workers_alive ?? 0) > 0}
-                  />
-                  <Health
-                    icon={<Activity />}
-                    name="Execution semantics"
+                    name="Delivery"
                     value="At least once"
-                    detail="Only a worker holding the current lease can commit."
+                    detail="A step can repeat after a crash; only the current lease holder can commit"
                     good={true}
                   />
-                </div>
+                </section>
               )}
             </>
           )}
-          <footer className="page-footer">
-            <span>AgentForge / execution control plane</span>
-            <span>
-              Designed for observable, recoverable work{" "}
-              <ArrowDownLeft size={12} />
-            </span>
-          </footer>
         </main>
       </div>
 
       {connectOpen && (
         <Modal
-          title="Connect your workspace"
-          subtitle="Use the API key from your server environment."
+          title="Connect"
+          subtitle="Use a key from your operator: the bootstrap key or one created with agentforge.admin."
           onClose={() => setConnectOpen(false)}
         >
           <form onSubmit={connect}>
-            <label htmlFor="api-key">API KEY</label>
+            <label htmlFor="api-key">API key</label>
             <input
               id="api-key"
               type="password"
               autoFocus
               autoComplete="off"
               spellCheck={false}
-              placeholder="Paste AGENTFORGE_API_KEY"
+              placeholder="Paste an API key"
               value={key}
               onChange={(e) => setKey(e.target.value)}
               required
@@ -554,7 +506,7 @@ export default function App() {
             />
             <div className="form-note">
               <LockKeyhole size={14} />
-              Kept in memory. Cleared when you reload or disconnect.
+              Kept in memory for this tab. Cleared on reload or disconnect
             </div>
             {error && (
               <div className="form-error" role="alert">
@@ -567,7 +519,7 @@ export default function App() {
               ) : (
                 <Zap size={15} />
               )}
-              Connect to control plane
+              Connect
             </button>
           </form>
         </Modal>
