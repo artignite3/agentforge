@@ -20,7 +20,7 @@ def settings(tmp_path):
 async def store(settings):
     database = Store(settings)
     await database.create_schema()
-    await database.register_key(owner_id(settings.api_key.get_secret_value()))
+    await database.bootstrap_credential(settings.api_key.get_secret_value())
     yield database
     await database.engine.dispose()
 

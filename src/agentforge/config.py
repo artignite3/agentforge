@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     lease_seconds: int = Field(default=30, ge=10, le=300)
     poll_seconds: float = Field(default=0.5, ge=0.1, le=10)
     tool_image: str = "agentforge-tool:local"
+    # Reverse proxies in front of the API that append to X-Forwarded-For (Caddy, nginx = 2).
+    # 0 ignores the header and uses the socket peer.
+    trusted_proxy_hops: int = Field(default=0, ge=0, le=5)
     openai_key: SecretStr = SecretStr("")
     openai_model: str = "gpt-4.1-mini"
     gemini_key: SecretStr = SecretStr("")
@@ -37,17 +40,24 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def production_safety(self) -> "Settings":
-        for secret in (self.api_key, self.sandbox_key):
-            if len(secret.get_secret_value()) < 32:
-                raise ValueError("API and sandbox keys must each contain at least 32 characters")
+        # Secrets are validated by the process that uses them (see require_secret), so the
+        # API need not hold the sandbox or provider keys, and the worker need not hold the
+        # operator key.
         if "*" in self.cors_origins:
             raise ValueError("Wildcard CORS is forbidden")
         if self.environment == "production":
-            if not self.database_url.startswith("postgresql+asyncpg://") or not self.redis_url:
-                raise ValueError("Production requires PostgreSQL and Redis")
+            if not self.database_url.startswith("postgresql+asyncpg://"):
+                raise ValueError("Production requires PostgreSQL")
             if any(not origin.startswith("https://") for origin in self.cors_origins):
                 raise ValueError("Production CORS origins must use HTTPS")
         return self
+
+
+def require_secret(value: SecretStr, name: str) -> str:
+    secret = value.get_secret_value()
+    if len(secret) < 32:
+        raise ValueError(f"{name} must contain at least 32 characters")
+    return secret
 
 
 @lru_cache

@@ -78,6 +78,8 @@ export interface System {
   semantics: string;
   sandbox: string;
   sandbox_ready: boolean;
+  workers_alive: number;
+  principal: { label: string; role: "read" | "submit" | "admin" };
 }
 
 export class API {

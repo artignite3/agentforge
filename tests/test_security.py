@@ -46,6 +46,7 @@ async def test_failed_rate_limiter_does_not_admit_requests(settings, store):
 
 async def test_interactive_docs_are_disabled_in_production(settings, store):
     settings.environment = "production"
+    settings.redis_url = "redis://127.0.0.1:1/0"  # Not contacted: /docs needs no rate limit.
     app = create_app(settings, store)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as c:
         assert (await c.get("/docs")).status_code == 404
