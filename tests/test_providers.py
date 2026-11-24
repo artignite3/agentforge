@@ -121,3 +121,84 @@ async def test_gemini_rejects_thought_only_response(settings, monkeypatch):
     )
     with pytest.raises(ProviderError, match="MalformedModelResponse"):
         await HTTPProvider(settings, "gemini").generate("Repair the fixture.", {})
+
+
+def openai_response(text, **extra):
+    return {
+        "status": "completed",
+        "output": [
+            {"type": "reasoning", "summary": []},
+            {"type": "message", "content": [{"type": "output_text", "text": text}]},
+        ],
+        "usage": {"input_tokens": 12, "output_tokens": 30},
+        **extra,
+    }
+
+
+async def test_openai_responses_contract_and_usage(settings, monkeypatch):
+    settings.openai_key = settings.api_key
+    action = json.dumps(
+        {"operation": "run_tests", "path": "", "content": "", "explanation": "Reproduce."}
+    )
+
+    def handler(request):
+        assert request.url.host == "api.openai.com"
+        assert request.url.path == "/v1/responses"
+        assert request.headers["authorization"] == "Bearer " + settings.api_key.get_secret_value()
+        body = json.loads(request.content)
+        assert body["store"] is False
+        assert body["max_output_tokens"] == OUTPUT_LIMIT
+        fmt = body["text"]["format"]
+        assert fmt["type"] == "json_schema" and fmt["strict"] is True
+        assert fmt["schema"]["additionalProperties"] is False
+        assert set(fmt["schema"]["required"]) == set(fmt["schema"]["properties"])
+        return httpx.Response(200, json=openai_response(action))
+
+    install_transport(monkeypatch, handler)
+    generation = await HTTPProvider(settings, "openai").generate("Repair the fixture.", {})
+    assert generation.action.operation == "run_tests"
+    assert (generation.input_tokens, generation.output_tokens) == (12, 30)
+
+
+@pytest.mark.parametrize(
+    "payload, kind, retryable",
+    [
+        (
+            {
+                "status": "completed",
+                "output": [{"type": "message", "content": [{"type": "refusal", "refusal": "no"}]}],
+                "usage": {"input_tokens": 1, "output_tokens": 1},
+            },
+            "ModelRefusal",
+            False,
+        ),
+        (
+            openai_response('{"operation": "fin', status="incomplete"),
+            "IncompleteModelResponse",
+            True,
+        ),
+        (openai_response('{"operation": "delete_everything"}'), "MalformedModelResponse", True),
+    ],
+)
+async def test_openai_refusal_incomplete_and_invalid_actions(
+    settings, monkeypatch, payload, kind, retryable
+):
+    settings.openai_key = settings.api_key
+    install_transport(monkeypatch, lambda request: httpx.Response(200, json=payload))
+    with pytest.raises(ProviderError) as error:
+        await HTTPProvider(settings, "openai").generate("Repair the fixture.", {})
+    assert (error.value.kind, error.value.retryable) == (kind, retryable)
+
+
+@pytest.mark.parametrize(
+    "header, expected",
+    [("7", 7.0), ("Wed, 21 Oct 2026 07:28:00 GMT", None), (None, None), ("-1", None)],
+)
+async def test_rate_limit_retry_after_hint(settings, monkeypatch, header, expected):
+    settings.gemini_key = settings.api_key
+    headers = {"retry-after": header} if header else {}
+    install_transport(monkeypatch, lambda request: httpx.Response(429, headers=headers))
+    with pytest.raises(ProviderError) as error:
+        await HTTPProvider(settings, "gemini").generate("Repair the fixture.", {})
+    assert error.value.kind == "RateLimited"
+    assert error.value.retry_after == expected

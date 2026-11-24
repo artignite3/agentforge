@@ -39,11 +39,15 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
             await limiter.redis.aclose()
         await database.engine.dispose()
 
+    production = config.environment == "production"
     app = FastAPI(
         title="AgentForge",
         version="0.1.0",
         lifespan=lifespan,
         description="Durable agent jobs with fenced leases and isolated repository tools.",
+        # Interactive docs load third-party CDN scripts that the production CSP blocks.
+        docs_url=None if production else "/docs",
+        redoc_url=None if production else "/redoc",
     )
     app.state.store = database
     app.add_middleware(BodyLimit, limit=config.request_limit)

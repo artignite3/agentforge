@@ -24,8 +24,17 @@ class LeaseLost(Exception):
     """The caller may no longer commit results or start external work."""
 
 
+# Internal coordination fields: useful to the store, meaningless or sensitive to API clients.
+PRIVATE_FIELDS = frozenset({"lease_token", "request_hash", "owner_id"})
+DAY_SECONDS = 86400
+
+
 def as_dict(row: Any) -> dict[str, Any]:
     return {column.name: getattr(row, column.name) for column in row.__table__.columns}
+
+
+def public(row: Any) -> dict[str, Any]:
+    return {k: v for k, v in as_dict(row).items() if k not in PRIVATE_FIELDS}
 
 
 def event(session: AsyncSession, run: Run, kind: str, **data: Any) -> None:
@@ -84,13 +93,13 @@ class Store:
             if existing:
                 if existing.config != spec.model_dump():
                     raise StoreError("Agent versions are immutable; choose a new version")
-                return as_dict(existing)
+                return public(existing)
             row = AgentRow(
                 owner_id=owner, name=spec.name, version=spec.version, config=spec.model_dump()
             )
             session.add(row)
             await session.flush()
-            return as_dict(row)
+            return public(row)
 
     async def list_agents(self, owner: str) -> list[dict[str, Any]]:
         async with self.sessions() as session:
@@ -100,7 +109,7 @@ class Store:
                 .order_by(AgentRow.created_at.desc())
                 .limit(100)
             )
-            return [as_dict(row) for row in rows]
+            return [public(row) for row in rows]
 
     async def get_agent(self, owner: str, agent_id: str) -> dict[str, Any]:
         async with self.sessions() as session:
@@ -109,7 +118,7 @@ class Store:
             )
             if row is None:
                 raise StoreError("Agent not found", 404)
-            return as_dict(row)
+            return public(row)
 
     async def create_run(
         self, owner: str, request: RunCreate, key: str, request_id: str, parent: str | None = None
@@ -126,7 +135,7 @@ class Store:
             if existing:
                 if existing.request_hash != fingerprint:
                     raise StoreError("Idempotency key was used with a different request")
-                return as_dict(existing)
+                return public(existing)
             agent = await session.scalar(
                 select(AgentRow).where(AgentRow.id == request.agent_id, AgentRow.owner_id == owner)
             )
@@ -172,14 +181,14 @@ class Store:
                 agent_version=agent.version,
                 provider=agent.config["provider"],
             )
-            return as_dict(run)
+            return public(run)
 
     async def get_run(self, owner: str, run_id: str) -> dict[str, Any]:
         async with self.sessions() as session:
             row = await session.scalar(select(Run).where(Run.id == run_id, Run.owner_id == owner))
             if row is None:
                 raise StoreError("Run not found", 404)
-            return as_dict(row)
+            return public(row)
 
     async def list_runs(self, owner: str, before: float | None = None) -> list[dict[str, Any]]:
         async with self.sessions() as session:
@@ -187,7 +196,7 @@ class Store:
             if before is not None:
                 query = query.where(Run.created_at < before)
             rows = await session.scalars(query.order_by(Run.created_at.desc()).limit(100))
-            return [as_dict(row) for row in rows]
+            return [public(row) for row in rows]
 
     async def trace(self, owner: str, run_id: str) -> dict[str, Any]:
         run = await self.get_run(owner, run_id)
@@ -229,7 +238,7 @@ class Store:
                 # Fence immediately: in-flight external work cannot commit after cancellation.
                 set_status(session, run, Status.CANCELLED)
                 await self._close_started(session, run, Status.CANCELLED)
-            return as_dict(run)
+            return public(run)
 
     async def claim(self) -> tuple[str, str] | None:
         now = time.time()
@@ -288,6 +297,34 @@ class Store:
             raise LeaseLost()
         return run
 
+    async def _admit_daily_spend(self, session: AsyncSession, owner: str, cost: int) -> None:
+        """Owner-wide cap across all runs created in the current UTC day."""
+        # Lock order is run -> api_key here; create_run takes only the api_key lock.
+        await session.execute(select(APIKey).where(APIKey.id == owner).with_for_update())
+        now = time.time()
+        spent = await session.scalar(
+            select(func.coalesce(func.sum(Run.spent_microusd), 0)).where(
+                Run.owner_id == owner, Run.created_at >= now - now % DAY_SECONDS
+            )
+        )
+        if (spent or 0) + cost > round(self.settings.daily_budget_usd * 1_000_000):
+            raise StoreError("DailyBudgetExhausted")
+
+    async def release(self, run_id: str, token: str) -> None:
+        """Hand a run back on graceful shutdown without counting it as a worker loss."""
+        async with self.sessions.begin() as session:
+            run = await self._fenced(session, run_id, token)
+            pending = await session.scalars(
+                select(Step).where(Step.run_id == run.id, Step.status == "STARTED")
+            )
+            for step in pending:
+                step.status = "UNKNOWN"
+                step.error_type = "WorkerStopped"
+            set_status(session, run, Status.RETRYING, reason="worker_stopped")
+            run.available_at = time.time()
+            run.lease_token = None
+            run.lease_until = None
+
     async def heartbeat(self, run_id: str, token: str) -> None:
         async with self.sessions.begin() as session:
             run = await self._fenced(session, run_id, token)
@@ -342,6 +379,8 @@ class Store:
                 raise StoreError("RetryLimit")
             if run.spent_microusd + cost > round(agent.config["budget_usd"] * 1_000_000):
                 raise StoreError("BudgetExhausted")
+            if cost:
+                await self._admit_daily_spend(session, run.owner_id, cost)
             if run.charged_tokens + tokens > agent.config["max_tokens"]:
                 raise StoreError("TokenLimit")
             run.spent_microusd += cost

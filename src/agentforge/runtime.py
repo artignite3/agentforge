@@ -9,12 +9,32 @@ from typing import Protocol, TypeVar
 
 import httpx
 
-from agentforge.domain import Action, Status, ToolRequest, ToolResult, reserve_cost, retry_delay
+from agentforge.domain import (
+    Action,
+    Status,
+    ToolRequest,
+    ToolResult,
+    action_policy_error,
+    reserve_cost,
+    retry_delay,
+    tests_verified,
+)
+from agentforge.fixtures import EXPECTED_TESTS
 from agentforge.providers import ProviderError, Router, prompt_for
 from agentforge.store import LeaseLost, Store, StoreError
 from agentforge.telemetry import log
 
 T = TypeVar("T")
+REJECTION_LIMIT = 3  # Consecutive rejected tool actions before the run stops.
+MAX_RETRY_AFTER = 30.0
+
+
+def backoff(attempt: int, retry_after: float | None = None) -> float:
+    """Jittered backoff, raised to an upstream Retry-After hint up to a fixed ceiling."""
+    delay = retry_delay(attempt)
+    if retry_after is not None:
+        delay = max(delay, min(retry_after, MAX_RETRY_AFTER))
+    return delay
 
 
 class ToolExecutor(Protocol):
@@ -134,7 +154,7 @@ class Runtime:
                         token,
                         step["id"],
                         exc.kind,
-                        retry_delay(step["attempt"]),
+                        backoff(step["attempt"], exc.retry_after),
                         exc.retryable,
                     )
                     return
@@ -150,49 +170,67 @@ class Runtime:
                             run_id, token, Status.FAILED, error="VerificationRequired"
                         )
                     return
+                recent = checkpoint["history"][-REJECTION_LIMIT:]
+                if len(recent) == REJECTION_LIMIT and all(h.get("rejected") for h in recent):
+                    await self.store.finish_run(
+                        run_id, token, Status.FAILED, error="RepeatedPolicyViolation"
+                    )
+                    return
                 step = await self.store.start_step(run_id, token, "tool")
                 started = time.monotonic()
-                try:
-                    request = ToolRequest(
-                        operation_id=step["id"], action=action, files=checkpoint["files"]
+                violation = action_policy_error(action, checkpoint["files"])
+                if violation is not None:
+                    # A planner mistake is an observation it can correct, not a fatal error.
+                    result = ToolResult(
+                        stderr="Rejected by policy: " + violation,
+                        exit_code=126,
+                        duration_ms=0,
+                        timeout_reason="PolicyViolation",
                     )
-                    result = await self.guarded(run_id, token, self.tools.execute(request))
-                    if result.timeout_reason:
-                        raise ProviderError("ToolTimeout", False)
-                    if action.operation == "write_file" and result.exit_code == 0:
-                        checkpoint["files"][action.path] = action.content
-                        checkpoint["tests_passed"] = False
-                    if action.operation == "run_tests":
-                        checkpoint["tests_passed"] = result.exit_code == 0
-                    checkpoint["last_result"] = result.model_dump()
-                    checkpoint["history"].append(
-                        {
-                            "operation": action.operation,
-                            "path": action.path,
-                            "exit_code": result.exit_code,
-                        }
+                else:
+                    try:
+                        request = ToolRequest(
+                            operation_id=step["id"], action=action, files=checkpoint["files"]
+                        )
+                        result = await self.guarded(run_id, token, self.tools.execute(request))
+                    except ProviderError as exc:
+                        await self.store.fail_step(
+                            run_id,
+                            token,
+                            step["id"],
+                            exc.kind,
+                            backoff(step["attempt"], exc.retry_after),
+                            exc.retryable,
+                        )
+                        return
+                    except ValueError:
+                        await self.store.fail_step(
+                            run_id, token, step["id"], "InvalidToolArguments", 0, False
+                        )
+                        return
+                completed = result.timeout_reason is None
+                if action.operation == "write_file" and completed and result.exit_code == 0:
+                    checkpoint["files"][action.path] = action.content
+                    checkpoint["tests_passed"] = False
+                if action.operation == "run_tests":
+                    checkpoint["tests_passed"] = tests_verified(
+                        result, EXPECTED_TESTS[run["fixture"]]
                     )
-                    checkpoint["pending_action"] = None
-                    await self.store.finish_step(
-                        run_id,
-                        token,
-                        step["id"],
-                        checkpoint,
-                        {"operation": action.operation, "path": action.path, **result.model_dump()},
-                        int((time.monotonic() - started) * 1000),
-                    )
-                except ProviderError as exc:
-                    await self.store.fail_step(
-                        run_id,
-                        token,
-                        step["id"],
-                        exc.kind,
-                        retry_delay(step["attempt"]),
-                        exc.retryable,
-                    )
-                    return
-                except ValueError:
-                    await self.store.fail_step(
-                        run_id, token, step["id"], "InvalidToolArguments", 0, False
-                    )
-                    return
+                checkpoint["last_result"] = result.model_dump()
+                checkpoint["history"].append(
+                    {
+                        "operation": action.operation,
+                        "path": action.path,
+                        "exit_code": result.exit_code,
+                        "rejected": violation is not None,
+                    }
+                )
+                checkpoint["pending_action"] = None
+                await self.store.finish_step(
+                    run_id,
+                    token,
+                    step["id"],
+                    checkpoint,
+                    {"operation": action.operation, "path": action.path, **result.model_dump()},
+                    int((time.monotonic() - started) * 1000),
+                )
