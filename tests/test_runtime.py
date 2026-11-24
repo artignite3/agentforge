@@ -20,8 +20,12 @@ class StubTools:
             "stats.py", ""
         ) or "min(low" in request.files.get("stats.py", "")
         exit_code = 1 if request.action.operation == "run_tests" and failed else 0
+        summary = "FAILED (failures=1)" if exit_code else "OK"
+        count = 4 if "mean" in request.files.get("stats.py", "") else 3
         return ToolResult(
-            exit_code=exit_code, duration_ms=1, stderr="FAILED" if exit_code else "OK"
+            exit_code=exit_code,
+            duration_ms=1,
+            stderr=f"...\n------\nRan {count} tests in 0.001s\n\n{summary}\n",
         )
 
 
@@ -152,3 +156,118 @@ async def test_real_full_runtime(store, settings, owner):
     assert "FAILED" in tools[1]["detail"]["stderr"]
     assert tools[-1]["detail"]["exit_code"] == 0
     assert "OK" in tools[-1]["detail"]["stderr"]
+
+
+class ScriptedPlanner:
+    """Returns a fixed sequence of actions, then finishes."""
+
+    def __init__(self, actions):
+        self.actions = list(actions)
+
+    async def generate(self, prompt, context):
+        action = self.actions.pop(0) if self.actions else Action(operation="finish")
+        return Generation(action=action, input_tokens=0, output_tokens=0)
+
+
+FIXED = "def mean(values):\n    if not values:\n        raise ValueError('empty input')\n    return sum(values) / len(values)\n"
+
+
+async def test_policy_violation_is_an_observation_the_planner_can_correct(store, settings, owner):
+    run = await submit(store, owner)
+    router = Router(settings)
+    router.providers["demo"] = ScriptedPlanner(
+        [
+            Action(operation="write_file", path="test_stats.py", content="pass"),
+            Action(operation="write_file", path="stats.py", content=FIXED),
+            Action(operation="run_tests"),
+        ]
+    )
+    await Runtime(store, router, StubTools()).execute(*(await store.claim()))
+    trace = await store.trace(owner, run["id"])
+    assert trace["run"]["status"] == "COMPLETED"
+    rejected = trace["steps"][1]["detail"]
+    assert rejected["timeout_reason"] == "PolicyViolation"
+    assert "Only stats.py may be modified" in rejected["stderr"]
+
+
+async def test_repeated_policy_violations_stop_the_run(store, settings, owner):
+    run = await submit(store, owner)
+    router = Router(settings)
+    router.providers["demo"] = ScriptedPlanner(
+        [Action(operation="read_file", path="missing.py")] * 4
+    )
+    await Runtime(store, router, StubTools()).execute(*(await store.claim()))
+    final = await store.get_run(owner, run["id"])
+    assert final["status"] == "FAILED"
+    assert final["error_type"] == "RepeatedPolicyViolation"
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "import os\nos._exit(0)\n",
+        "import unittest\nunittest.TestCase.assertEqual = lambda *a: None\n",
+        "def mean(values):\n    exit(0)\n",
+        "def mean(values):\n    return values.__class__\n",
+    ],
+)
+async def test_result_faking_source_is_rejected_before_execution(store, settings, owner, source):
+    run = await submit(store, owner)
+    router = Router(settings)
+    router.providers["demo"] = ScriptedPlanner(
+        [
+            Action(operation="write_file", path="stats.py", content=source),
+            Action(operation="run_tests"),
+        ]
+    )
+    await Runtime(store, router, StubTools()).execute(*(await store.claim()))
+    trace = await store.trace(owner, run["id"])
+    assert trace["steps"][1]["detail"]["timeout_reason"] == "PolicyViolation"
+    assert trace["checkpoint"]["payload"]["files"]["stats.py"] != source
+    assert trace["run"]["status"] == "FAILED"
+
+
+async def test_exit_zero_without_expected_test_summary_is_not_verified(store, settings, owner):
+    class SilentSuccess:
+        async def execute(self, request):
+            return ToolResult(exit_code=0, duration_ms=1, stderr="")
+
+    run = await submit(store, owner)
+    router = Router(settings)
+    router.providers["demo"] = ScriptedPlanner([Action(operation="run_tests")])
+    await Runtime(store, router, SilentSuccess()).execute(*(await store.claim()))
+    final = await store.get_run(owner, run["id"])
+    assert final["status"] == "FAILED"
+    assert final["error_type"] == "VerificationRequired"
+
+
+async def test_tool_timeout_is_recorded_and_planner_continues(store, settings, owner):
+    class TimeoutOnce(StubTools):
+        def __init__(self):
+            self.calls = 0
+
+        async def execute(self, request):
+            self.calls += 1
+            if self.calls == 1:
+                return ToolResult(exit_code=124, duration_ms=1, timeout_reason="ToolDeadline")
+            return await super().execute(request)
+
+    run = await submit(store, owner)
+    router = Router(settings)
+    router.providers["demo"] = ScriptedPlanner(
+        [
+            Action(operation="run_tests"),
+            Action(operation="write_file", path="stats.py", content=FIXED),
+            Action(operation="run_tests"),
+        ]
+    )
+    await Runtime(store, router, TimeoutOnce()).execute(*(await store.claim()))
+    assert (await store.get_run(owner, run["id"]))["status"] == "COMPLETED"
+
+
+def test_backoff_honours_bounded_retry_after():
+    from agentforge.runtime import MAX_RETRY_AFTER, backoff
+
+    assert backoff(1, 12) >= 12
+    assert backoff(1, 10_000) <= MAX_RETRY_AFTER
+    assert backoff(1, None) <= 1

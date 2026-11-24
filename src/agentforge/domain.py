@@ -1,5 +1,6 @@
 """Vendor-neutral contracts, input limits, and legal run transitions."""
 
+import ast
 import math
 import random
 from enum import StrEnum
@@ -144,3 +145,73 @@ class Generation(StrictModel):
 
 def reserve_cost(input_bound: int, output_bound: int, input_rate: float, output_rate: float) -> int:
     return math.ceil(input_bound * input_rate + output_bound * output_rate)
+
+
+# Names that let fixture source escape its role as plain arithmetic: process exit, dynamic
+# code, reflection, I/O, or test-framework tampering. A heuristic for the bundled fixtures,
+# not a general sandbox; container isolation remains the security boundary.
+_FORBIDDEN_NAMES = frozenset(
+    {
+        "__import__",
+        "breakpoint",
+        "compile",
+        "delattr",
+        "eval",
+        "exec",
+        "exit",
+        "getattr",
+        "globals",
+        "input",
+        "locals",
+        "open",
+        "quit",
+        "setattr",
+        "vars",
+    }
+)
+_ALLOWED_IMPORTS = frozenset({"math"})
+
+
+def source_policy_error(source: str) -> str | None:
+    """Reject fixture source that could fake a test result instead of computing one."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return None  # Let the tests report the syntax error as an ordinary observation.
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names = {alias.name.split(".")[0] for alias in node.names}
+        elif isinstance(node, ast.ImportFrom):
+            names = {(node.module or "").split(".")[0]}
+        else:
+            names = set()
+        if names - _ALLOWED_IMPORTS:
+            return "Only the math module may be imported by stats.py"
+        if isinstance(node, ast.Name) and node.id in _FORBIDDEN_NAMES:
+            return f"stats.py may not reference {node.id}"
+        if isinstance(node, ast.Attribute) and node.attr.startswith("__"):
+            return "stats.py may not access dunder attributes"
+    return None
+
+
+def action_policy_error(action: Action, files: dict[str, str]) -> str | None:
+    """Explain a disallowed tool action so the planner can correct it on the next step."""
+    if action.operation in {"read_file", "write_file"} and action.path not in files:
+        return f"{action.path} is not in the workspace; available files: {', '.join(sorted(files))}"
+    if action.operation == "write_file":
+        if action.path != "stats.py":
+            return "Only stats.py may be modified; tests are read-only"
+        return source_policy_error(action.content)
+    return None
+
+
+def tests_verified(result: ToolResult, expected_tests: int) -> bool:
+    """Require a clean exit AND unittest's own summary for the trusted fixture's test count."""
+    summary = result.stderr.rstrip().splitlines()
+    return (
+        result.exit_code == 0
+        and result.timeout_reason is None
+        and bool(summary)
+        and summary[-1].strip() == "OK"
+        and f"Ran {expected_tests} test" in result.stderr
+    )

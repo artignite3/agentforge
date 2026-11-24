@@ -84,3 +84,40 @@ async def test_actual_usage_over_limit_fails_before_finish(store, owner):
     assert result["status"] == "FAILED"
     assert result["spent_microusd"] == 200
     assert result["error_type"] == "ProviderUsageExceededReservation"
+
+
+async def test_graceful_release_requeues_without_consuming_recovery(store, owner):
+    run = await new_run(store, owner)
+    run_id, token = await store.claim()
+    step = await store.start_step(run_id, token, "model")
+    await store.release(run_id, token)
+    with pytest.raises(LeaseLost):
+        await store.heartbeat(run_id, token)
+    reclaimed_id, _ = await store.claim()
+    trace = await store.trace(owner, run["id"])
+    assert reclaimed_id == run_id
+    assert trace["run"]["recoveries"] == 0
+    assert trace["run"]["status"] == "RUNNING"
+    assert trace["steps"][0]["id"] == step["id"]
+    assert trace["steps"][0]["error_type"] == "WorkerStopped"
+
+
+async def test_daily_budget_spans_runs(store, owner):
+    store.settings.daily_budget_usd = 0.0005  # 500 micro-USD across all runs today
+    first = await new_run(store, owner, name="a")
+    run_id, token = await store.claim()
+    await store.start_step(run_id, token, "model", cost=400)
+    await store.cancel(owner, first["id"])
+    agent = await store.create_agent(owner, Agent(name="b"))
+    await store.create_run(owner, RunCreate(agent_id=agent["id"]), "second", "request")
+    run_id, token = await store.claim()
+    with pytest.raises(StoreError, match="DailyBudgetExhausted"):
+        await store.start_step(run_id, token, "model", cost=200)
+
+
+async def test_api_records_hide_internal_coordination_fields(store, owner):
+    run = await new_run(store, owner)
+    await store.claim()
+    exposed = await store.get_run(owner, run["id"])
+    assert not {"lease_token", "request_hash", "owner_id"} & set(exposed)
+    assert not {"lease_token", "request_hash", "owner_id"} & set(run)

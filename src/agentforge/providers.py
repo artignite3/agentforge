@@ -13,9 +13,18 @@ from agentforge.domain import Action, Agent, Generation, reserve_cost
 
 
 class ProviderError(Exception):
-    def __init__(self, kind: str, retryable: bool = True):
+    def __init__(self, kind: str, retryable: bool = True, retry_after: float | None = None):
         super().__init__(kind)
-        self.kind, self.retryable = kind, retryable
+        self.kind, self.retryable, self.retry_after = kind, retryable, retry_after
+
+
+def parse_retry_after(value: str | None) -> float | None:
+    """Accept delta-seconds only; HTTP-date hints fall back to jittered backoff."""
+    try:
+        seconds = float(value) if value is not None else None
+    except ValueError:
+        return None
+    return seconds if seconds is not None and 0 <= seconds < 3600 else None
 
 
 class LLMProvider(Protocol):
@@ -146,6 +155,7 @@ class HTTPProvider:
                             if response.status_code == 429
                             else f"ProviderHTTPError{response.status_code}",
                             response.status_code in {408, 429} or response.status_code >= 500,
+                            parse_retry_after(response.headers.get("retry-after")),
                         )
                     chunks = bytearray()
                     async for chunk in response.aiter_bytes():
@@ -154,6 +164,14 @@ class HTTPProvider:
                             raise ProviderError("ProviderResponseTooLarge", False)
             data = json.loads(chunks)
             if self.name == "openai":
+                if data.get("status") == "incomplete":
+                    raise ProviderError("IncompleteModelResponse")
+                if any(
+                    part.get("type") == "refusal"
+                    for item in data["output"]
+                    for part in item.get("content", [])
+                ):
+                    raise ProviderError("ModelRefusal", False)
                 value = "".join(
                     part["text"]
                     for item in data["output"]

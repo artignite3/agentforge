@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     request_limit: int = Field(default=65536, ge=1024, le=262144)
     rate_limit: int = Field(default=120, ge=1, le=10000)
     max_active_runs: int = Field(default=8, ge=1, le=100)
+    # Owner-wide estimated spend ceiling across runs created in one UTC day.
+    daily_budget_usd: float = Field(default=2.0, ge=0, le=1000, allow_inf_nan=False)
     lease_seconds: int = Field(default=30, ge=10, le=300)
     poll_seconds: float = Field(default=0.5, ge=0.1, le=10)
     tool_image: str = "agentforge-tool:local"

@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import {
   Activity,
   ArrowDownLeft,
@@ -54,6 +60,11 @@ export default function App() {
   const [selected, setSelected] = useState<string | null>(null);
   const [trace, setTrace] = useState<Trace | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
+  // Last event id fetched for the selected run; the API pages 200 events per request.
+  const eventCursor = useRef<{ run: string | null; id: number }>({
+    run: null,
+    id: 0,
+  });
   const [tab, setTab] = useState("Timeline");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -69,12 +80,18 @@ export default function App() {
       setLastSync(Date.now());
       setError("");
       if (selected) {
+        const after =
+          eventCursor.current.run === selected ? eventCursor.current.id : 0;
         const [t, e] = await Promise.all([
           api.trace(selected),
-          api.events(selected),
+          api.events(selected, after),
         ]);
         setTrace(t);
-        setEvents(e);
+        if (after === 0) setEvents(e);
+        else if (e.length) setEvents((previous) => [...previous, ...e]);
+        if (e.length)
+          eventCursor.current = { run: selected, id: e[e.length - 1].id };
+        else if (after === 0) eventCursor.current = { run: selected, id: 0 };
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Connection failed");

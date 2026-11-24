@@ -6,7 +6,7 @@ import signal
 from agentforge.config import get_settings
 from agentforge.providers import Router
 from agentforge.runtime import RemoteTools, Runtime
-from agentforge.store import Store
+from agentforge.store import LeaseLost, Store
 from agentforge.telemetry import log
 
 
@@ -36,11 +36,18 @@ async def main() -> None:
                         {active, shutdown}, return_when=asyncio.FIRST_COMPLETED
                     )
                     shutdown.cancel()
-                    if active not in done:
+                    interrupted = active not in done
+                    if interrupted:
                         active.cancel()
                     with contextlib.suppress(asyncio.CancelledError):
                         await active
                     active = None
+                    if interrupted:
+                        # Graceful stop: requeue immediately instead of waiting for lease
+                        # expiry, and do not consume one of the run's crash recoveries.
+                        with contextlib.suppress(LeaseLost):
+                            await store.release(*claimed)
+                        log("worker", "run.released", run_id=claimed[0])
                 else:
                     await asyncio.sleep(settings.poll_seconds)
             except Exception as exc:
