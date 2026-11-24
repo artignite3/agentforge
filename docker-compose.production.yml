@@ -4,16 +4,25 @@ x-production: &production
   # The dashboard and /api share one HTTPS origin; no cross-origin browser access needed.
   AGENTFORGE_CORS_ORIGINS: "[]"
 
+x-logging: &logging
+  driver: json-file
+  options: {max-size: "10m", max-file: "5"}
+
 services:
   api:
     ports: !reset []
-    environment: *production
+    environment:
+      <<: *production
+      # Caddy records the client address, nginx appends Caddy's: two trusted hops.
+      AGENTFORGE_TRUSTED_PROXY_HOPS: "2"
   worker:
     environment: *production
   migrate:
     environment: *production
   frontend:
     ports: !reset []
+    # Only the frontend joins the edge network; the edge cannot reach the API directly.
+    networks: [web, edge]
   edge:
     image: agentforge-edge:local
     build: ./deploy
@@ -21,10 +30,11 @@ services:
       AGENTFORGE_DOMAIN: ${AGENTFORGE_DOMAIN:?Run scripts/prepare_deploy.py with your domain}
     ports: ["80:8081", "443:8443"]
     volumes: [caddy-data:/data, caddy-config:/config]
-    networks: [control]
+    networks: [edge]
     depends_on:
       frontend: {condition: service_started}
     restart: unless-stopped
+    logging: *logging
     read_only: true
     tmpfs: ["/tmp:size=16m,noexec,nosuid,nodev"]
     cap_drop: [ALL]
@@ -36,3 +46,6 @@ services:
 volumes:
   caddy-data:
   caddy-config:
+
+networks:
+  edge: {}  # Internet-facing: Caddy <-> frontend; Caddy also needs egress for ACME.

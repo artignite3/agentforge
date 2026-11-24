@@ -14,19 +14,22 @@ Agent frameworks make it easy to start a loop. AgentForge focuses on what happen
 
 Dashboard: https://agentforge-artignite3.indiasouthcentral.cloudapp.azure.com
 
-The dashboard is publicly reachable; viewing execution data and submitting jobs requires the operator API key. On October 13, 2026, the Azure deployment completed a live Gemini 3.5 Flash-Lite repair (`0e9292f4-6623-4569-8772-68f7bd380c27`). Four model calls and three sandboxed tool calls reproduced failing tests, changed the mean denominator from `len(values) + 1` to `len(values)`, and passed the unchanged original tests. The saved trace reported 8.29 seconds, 2,445 accounted tokens, and $0.005371 estimated accounted cost using configured operator rates, not an invoice. This is one integration result, not a model-quality or performance benchmark.
+The dashboard is publicly reachable; viewing execution data and submitting jobs requires the operator API key. On October 13, 2026, the Azure deployment completed a live Gemini 3.5 Flash-Lite repair (`0e9292f4-6623-4569-8772-68f7bd380c27`). Four model calls and three sandboxed tool calls reproduced failing tests, changed the mean denominator from `len(values) + 1` to `len(values)`, and the unchanged original test file then exited 0. The saved trace reported 8.29 seconds, 2,445 accounted tokens, and $0.005371 estimated accounted cost using configured operator rates, not an invoice. This is one integration result, not a model-quality or performance benchmark.
 
-The model's written explanation incorrectly mentioned Python 2/integer division. Completion verifies the supplied regression tests; explanation accuracy is a separate evaluation criterion. Public-host crash recovery/isolation checks and image OS scanning remain additional hardening work. Database backup restoration, encrypted off-host transfer, host updates/reboot, and post-reboot execution have been verified separately.
+The model's written explanation incorrectly mentioned Python 2/integer division. Completion verifies the supplied regression tests; explanation accuracy is a separate evaluation criterion, and the dashboard labels the explanation as unverified. That run predates the stricter verification described below (expected test count plus a source policy). Public-host crash recovery/isolation checks and image OS scanning remain additional hardening work. Database backup restoration, encrypted off-host transfer, host updates/reboot, and post-reboot execution were checked by the operator on the Azure host in October 2026; that evidence is kept privately, not in this repository.
 
 ## What works
 
-- Authenticated FastAPI control plane and a small Python SDK.
+- Authenticated FastAPI control plane and a small Python SDK. Multiple hashed API keys with `read` / `submit` / `admin` roles, expiry, and revocation; bootstrap-key rotation keeps existing data; run creation and cancellation record the acting key.
 - PostgreSQL job queue with `FOR UPDATE SKIP LOCKED`, expiring leases, fencing tokens, and atomic step/checkpoint/event commits.
-- Bounded retries with jitter, deadline enforcement, cancellation, idempotent submission, and conservative token/cost admission.
-- Vendor-neutral OpenAI and Gemini adapters; explicit rules-based cost/fallback routing recorded in traces.
-- Private Docker tool gateway: non-root, no network, no host mounts, read-only root filesystem, CPU/memory/PID/output/time limits.
+- Bounded retries with capped jitter that honours provider `Retry-After` hints (up to 30 s), deadline enforcement, cancellation, idempotent submission, graceful worker shutdown that requeues without consuming a crash recovery, and conservative token/cost admission per run plus a per-owner daily spend cap.
+- Planner mistakes (writing a test file, reading a missing path, a tool deadline) come back to the model as observations it can correct, instead of failing the run. A run completes only when unittest reports the fixture's trusted test count and `OK`; `stats.py` source that could fake a pass (`os._exit`, patching `unittest`, reflection) is rejected before execution.
+- Provider-neutral adapters: Gemini verified on one live run; the OpenAI Responses adapter is contract-tested against recorded response shapes (including refusals and incomplete responses) but has not been exercised live. Rules-based cost/fallback routing is recorded in traces.
+- Tool containers: non-root, no network, no host mounts, read-only root filesystem, CPU/memory/PID/output/time limits. They are started by a private gateway that holds Docker socket access and is therefore a privileged component.
 - React/TypeScript dashboard with real runs, timelines, output, agent versions, routing, and checkpoint snapshots.
-- Regression fixtures, crash-recovery tests, real Docker/PostgreSQL integration tests, A/B evaluation script, and CI.
+- Operations: worker heartbeats with a container healthcheck; Prometheus gauges for queue depth, oldest queued run, expired leases, worker heartbeat age, daily spend, and step outcomes; a retention CLI; bounded container logs.
+- Least-privilege deployment: the public API holds no provider or sandbox credentials, and Compose segments the edge, web, data, cache, tools, and egress networks.
+- 99 automated tests: 94 run anywhere (SQLite, mocked providers, synthetic Compose configs); 5 need Docker, PostgreSQL, or the Compose CLI and run in CI. Plus a repeated-trial A/B evaluation script.
 
 `demo` is a **deterministic scripted planner**, clearly labelled throughout the UI. It makes no LLM calls. Its tests still execute in real isolated containers. Use `openai`, `gemini`, or `auto` for live inference; these policies never silently fall back to the demo.
 
@@ -36,7 +39,7 @@ The model's written explanation incorrectly mentioned Python 2/integer division.
 flowchart TD
     SDK[Python SDK] --> API[FastAPI control plane]
     UI[React dashboard / nginx] --> API
-    API --> PG[(PostgreSQL: queue, runs, leases, checkpoints, events)]
+    API --> PG[(PostgreSQL: queue, runs, leases, checkpoints, events, keys, heartbeats)]
     API --> Redis[(Redis: rate limits)]
     Worker[Async worker] --> PG
     Worker --> Router[Rules-based provider router]
@@ -45,11 +48,11 @@ flowchart TD
     Worker --> Gateway[Private tool gateway]
     Gateway --> Docker[Trusted Docker daemon]
     Docker --> Tool[Disposable non-root tool container]
-    API --> Metrics[Prometheus HTTP metrics]
+    API --> Metrics[Prometheus: HTTP + queue/worker/spend gauges]
     PG --> Trace[Persisted execution trace]
 ```
 
-PostgreSQL is both the queue and state store. Submission cannot commit a run while losing a separate enqueue write. Redis outages do not lose jobs; authenticated API requests fail closed while distributed rate limiting is unavailable.
+PostgreSQL is both the queue and state store. Workers report liveness, sandbox readiness, and their provider catalog through a heartbeat table, so the API needs no provider or gateway credentials to show system health. Submission cannot commit a run while losing a separate enqueue write. Redis outages do not lose jobs; authenticated API requests fail closed while distributed rate limiting is unavailable.
 
 ## Quick start
 
@@ -60,11 +63,11 @@ python scripts/bootstrap.py
 docker compose up --build
 ```
 
-Open **http://localhost:8080**. Select **Connect workspace** and paste `AGENTFORGE_API_KEY` from the generated, gitignored `.env`. Launch a run using the deterministic demo planner. API docs: **http://localhost:8000/docs**. Only frontend and API ports are bound, both to localhost by default.
+Open **http://localhost:8080**. Select **Connect workspace** and paste `AGENTFORGE_API_KEY` from the generated, gitignored `.env`. Launch a run using the deterministic demo planner. API docs: **http://localhost:8000/docs** (development only; production serves the OpenAPI schema but not the interactive pages). Only frontend and API ports are bound, both to localhost by default.
 
 The startup sequence builds the tool image, starts PostgreSQL/Redis, applies Alembic migrations, checks sandbox/API readiness, and starts the worker. Subsequent starts need only `docker compose up`.
 
-To use a live model, set `AGENTFORGE_OPENAI_KEY` or `AGENTFORGE_GEMINI_KEY` in `.env`, then recreate API and worker with `docker compose up -d`. Model IDs and conservative micro-USD/token estimates are configurable. The example rates are **operator estimates, not current provider pricing**. Verify availability and pricing for your own account.
+To use a live model, set `AGENTFORGE_OPENAI_KEY` or `AGENTFORGE_GEMINI_KEY` in `.env`, then recreate API and worker with `docker compose up -d`. Model IDs, conservative micro-USD/token estimates, and `AGENTFORGE_DAILY_BUDGET_USD` (estimated spend across all runs per UTC day, default $2) are configurable. Also set a spending cap in the provider's own console; AgentForge's limits are estimates. The example rates are **operator estimates, not current provider pricing**. Verify availability and pricing for your own account.
 
 Gemini defaults to `gemini-3.8-flash`. The adapter uses its structured JSON response format and low thinking level, excludes thought summaries when parsing actions, and includes thinking tokens in output accounting. Existing Gemini 2.5 configurations retain their older request format, but new accounts may be denied access to those models. For an existing production deployment, update the model and rate fields in `.env.production` explicitly; a source update does not overwrite that private file. Non-rate-limit HTTP failures record only their status code, never upstream error bodies or keys.
 
@@ -86,6 +89,29 @@ curl http://localhost:8000/v1/runs \
 ```
 
 Reuse the idempotency key when retrying an ambiguous HTTP submission. The same key and request return the same run; a different body returns 409. `POST /v1/runs/{id}/retry` creates a **new run from the original fixture**, linked to its unsuccessful parent. Automatic worker recovery resumes the existing run from its latest checkpoint.
+
+## API keys and roles
+
+The `AGENTFORGE_API_KEY` from the environment is the **bootstrap admin key**. Create a separate key for each person or integration, with the least role it needs:
+
+| Role | Can |
+|---|---|
+| `read` | View runs, traces, events, agents, providers, system status, and `/metrics` |
+| `submit` | Everything `read` can, plus register agents, submit, cancel, and retry runs |
+| `admin` | Everything `submit` can, plus create, list, and revoke keys |
+
+```sh
+# Over the API (admin key required). The plaintext key is returned once.
+curl -X POST http://localhost:8000/v1/keys -H "Authorization: Bearer $AGENTFORGE_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"label":"ci","role":"submit","expires_in_days":90}'
+curl -X POST http://localhost:8000/v1/keys/<key-id>/revoke -H "Authorization: Bearer $AGENTFORGE_API_KEY"
+
+# Or with direct database access, which also works if every admin key is lost:
+docker compose exec api python -m agentforge.admin keys create --label prometheus --role read
+docker compose exec api python -m agentforge.admin keys list
+```
+
+Only SHA-256 hashes of keys are stored. Revocation and expiry take effect in under five seconds in every API process. To rotate the bootstrap key, change `AGENTFORGE_API_KEY` and restart the API: on a single-owner deployment the new key joins the same owner and the old bootstrap key is revoked, so no agents or runs are orphaned.
 
 ## Python SDK
 
@@ -134,7 +160,7 @@ video-production/agentforge-launch/
 
 Root configuration defines the Python package, Compose services, migrations, and CI. The dashboard and film have independent npm lockfiles. The film is an optional production package and is excluded from application Docker images.
 
-Credentials, databases, backups, installed dependencies, local reports, and render intermediates are ignored by Git. Put private operational material under `.local/`; film renders and checks write to the ignored `out/`, and audio preparation writes intermediates to the ignored `work/`. Only the curated finished film and poster belong in `assets/media/`. Docker build contexts allow only the inputs needed by each image.
+Operator commands live in `python -m agentforge.admin` (keys and retention). Credentials, databases, backups, installed dependencies, local reports, and render intermediates are ignored by Git. Put private operational material under `.local/`; film renders and checks write to the ignored `out/`, and audio preparation writes intermediates to the ignored `work/`. Only the curated finished film and poster belong in `assets/media/`. Docker build contexts allow only the inputs needed by each image.
 
 ## Verification
 
@@ -152,16 +178,18 @@ cd frontend && npm ci && npm run build && npm audit
 Real isolation tests require the Docker engine and `agentforge-tool:local` image. Set `RUN_DOCKER_TESTS=1` and run pytest. To verify PostgreSQL concurrency, set `POSTGRES_TEST_URL` to a disposable PostgreSQL database and run `pytest -m postgres`; the test creates and removes only its own randomly named schema.
 
 ```sh
-uv run python evals/compare.py --provider demo
+uv run python evals/compare.py --provider demo --trials 5
 ```
 
-The evaluator reports task completion, supplied-regression pass rate, tool exit success, retries, latency, tokens, and estimated cost for two immutable agent prompt versions. Demo versions use the same scripted planner; identical success is expected. This is an infrastructure check, not evidence of model quality. A/B model conclusions require live providers, more cases, and repeated trials.
+The evaluator runs each of two immutable prompt versions against each case `--trials` times (default 3). Per run it records verified completion, model and tool call counts, policy rejections, retried attempts, recoveries, tokens, and estimated cost. Latency is split into **queue wait** (submission to first claim) and **execution** (first claim to terminal state), so a busy single-worker queue does not inflate execution numbers. Summaries report the median and nearest-rank p95 execution time and the verified rate. Client-side failures are recorded as errors rather than aborting the report.
+
+Demo versions use the same scripted planner, so identical results are expected. This is an infrastructure check, not evidence of model quality. With two cases and a handful of trials the numbers are descriptive only; model A/B conclusions need live providers, more cases, and enough trials for a significance test.
 
 ## Security and reliability
 
 See [SECURITY.md](SECURITY.md) for the threat model, controls, and limitations, and [ARCHITECTURE.md](ARCHITECTURE.md) for state transitions, schema, recovery semantics, and failure policy.
 
-The gateway is a trusted service with Docker control. API, worker, and tool containers do not mount the Docker socket. Tool containers have no secrets, network, or host filesystem mounts. Docker shares a kernel; hostile public multi-tenant execution requires a stronger isolation boundary such as a dedicated sandbox VM or microVM service.
+The gateway is a trusted service with Docker control, reachable only from the worker on an internal network. API, worker, and tool containers do not mount the Docker socket. Tool containers have no secrets, network, or host filesystem mounts. Docker shares a kernel; hostile public multi-tenant execution requires a stronger isolation boundary such as a dedicated sandbox VM or microVM service.
 
 External provider calls can execute more than once across a crash or ambiguous timeout. Fencing protects **database commits**, not provider billing. Unknown calls retain their full reservation. Estimated spend is not an invoice or a provider-enforced account limit. Passing a regression suite is not proof that adversarial code is correct.
 
@@ -187,4 +215,4 @@ CI runs lint, type checking, unit tests, real PostgreSQL/Docker tests, dependenc
 
 ## Scope and future work
 
-This is a **portfolio-oriented production baseline**, not enterprise production software. Deferred work: general repositories, shell/Python tools, streaming model tokens/SSE, user accounts and RBAC, distributed circuit breakers, tracing exporters, retention enforcement, arbitrary checkpoint replay, gVisor/Firecracker, learned routing, and larger semantic evaluations.
+This is a **production-style reference implementation for a single operator workspace with a small number of trusted users**, not enterprise production software. Open gaps: application images are pinned by tag rather than digest and are not vulnerability-scanned in CI; metrics exist but no alert rules or dashboards are shipped; backups and retention are run by hand or by the operator's scheduler; leases use application clocks (keep hosts on NTP); one owner per deployment (keys are per user, not per tenant); and tool containers share the host kernel. The segmented networks and least-privilege environments are validated from configuration (`scripts/deploy_check.py`, CI's Compose merge test) but have not yet been re-verified on the Azure host. Other deferred work: general repositories, shell/Python tools, streaming model tokens/SSE, distributed circuit breakers, tracing exporters, arbitrary checkpoint replay, gVisor/Firecracker, learned routing, and larger semantic evaluations.

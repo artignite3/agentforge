@@ -247,12 +247,16 @@ export function RunDetails({
               </section>
               <section className="panel">
                 <div className="panel-heading">
-                  <h3>Agent output</h3>
+                  <h3>Model explanation (not verified)</h3>
                   <Terminal size={15} />
                 </div>
                 <p className="agent-output">
                   {trace.run.output ||
                     "The final explanation appears when execution completes."}
+                </p>
+                <p className="agent-output-note">
+                  Written by the planner. Completion is decided by the test
+                  result above, not by this text.
                 </p>
               </section>
               <div className="security-caption">

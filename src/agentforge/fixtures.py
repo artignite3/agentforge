@@ -1,5 +1,8 @@
 """Small immutable evaluation fixtures; tests may never be rewritten by agents."""
 
+# Trusted test counts; a run passes only when unittest reports exactly this many tests.
+EXPECTED_TESTS = {"mean": 4, "clamp": 3}
+
 
 def repository(name: str) -> dict[str, str]:
     if name == "clamp":
