@@ -104,13 +104,18 @@ export default function App() {
     return () => clearInterval(handle);
   }, [refresh]);
   useEffect(() => {
-    if (api)
+    if (!api) return;
+    // Worker liveness changes over time; poll it more slowly than runs.
+    const load = () =>
       Promise.all([api.providers(), api.system()])
         .then(([p, s]) => {
           setProviders(p);
           setSystem(s);
         })
         .catch((e) => setError(String(e)));
+    void load();
+    const handle = setInterval(() => void load(), 15000);
+    return () => clearInterval(handle);
   }, [api]);
 
   async function connect(e: FormEvent) {
@@ -247,6 +252,8 @@ export default function App() {
             <span className="environment">
               <span />
               {system?.environment || "Local environment"}
+              {system &&
+                ` · ${system.principal.label} (${system.principal.role})`}
             </span>
             <button
               className="icon-button"
@@ -494,8 +501,15 @@ export default function App() {
                           : "Unavailable"
                         : "Unknown"
                     }
-                    detail="Docker connectivity and tool image readiness, probed by the API."
+                    detail="Gateway and tool image readiness, reported by live workers."
                     good={system?.sandbox_ready === true}
+                  />
+                  <Health
+                    icon={<Cpu />}
+                    name="Workers"
+                    value={system ? `${system.workers_alive} alive` : "Unknown"}
+                    detail="Workers heartbeat every 5 s; none alive means queued runs wait."
+                    good={(system?.workers_alive ?? 0) > 0}
                   />
                   <Health
                     icon={<Activity />}

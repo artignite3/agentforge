@@ -17,10 +17,46 @@ class Base(DeclarativeBase):
 
 
 class APIKey(Base):
+    """An owner (workspace). The historical table name predates multiple credentials.
+
+    For deployments created before credentials existed, the id is the SHA-256 of the
+    original operator key; it is now only an identifier and survives key rotation.
+    """
+
     __tablename__ = "api_keys"
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     label: Mapped[str] = mapped_column(String(80), default="operator")
     created_at: Mapped[float] = mapped_column(Float, default=time.time)
+
+
+class Credential(Base):
+    """A bearer key for an owner. Only the SHA-256 of the key is stored."""
+
+    __tablename__ = "credentials"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("api_keys.id"), index=True)
+    key_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    label: Mapped[str] = mapped_column(String(80))
+    role: Mapped[str] = mapped_column(String(16))
+    bootstrap: Mapped[bool] = mapped_column(default=False)
+    created_by: Mapped[str | None] = mapped_column(String(36))
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+    expires_at: Mapped[float | None] = mapped_column(Float)
+    revoked_at: Mapped[float | None] = mapped_column(Float)
+    revoked_by: Mapped[str | None] = mapped_column(String(36))
+    last_used_at: Mapped[float | None] = mapped_column(Float)
+
+
+class WorkerHeartbeat(Base):
+    """Liveness and capability report written by each worker process."""
+
+    __tablename__ = "worker_heartbeats"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    started_at: Mapped[float] = mapped_column(Float)
+    seen_at: Mapped[float] = mapped_column(Float, index=True)
+    run_id: Mapped[str | None] = mapped_column(String(36))
+    sandbox_ready: Mapped[bool] = mapped_column(default=False)
+    providers: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
 
 
 class AgentRow(Base):

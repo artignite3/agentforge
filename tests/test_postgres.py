@@ -29,7 +29,7 @@ async def test_concurrent_claims_and_idempotent_admission(settings):
     try:
         await database.create_schema()
         owner = owner_id(settings.api_key.get_secret_value())
-        await database.register_key(owner)
+        await database.bootstrap_credential(settings.api_key.get_secret_value())
         agent = await database.create_agent(owner, Agent())
         spec = RunCreate(agent_id=agent["id"])
         duplicates = await asyncio.gather(

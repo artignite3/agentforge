@@ -73,3 +73,108 @@ def test_real_compose_merge_removes_application_ports(tmp_path):
     config["services"]["api"]["ports"] = [{"published": "8000", "target": 8000}]
     with pytest.raises(ValueError, match="Only the TLS edge"):
         validate(config)
+
+
+def valid_config():
+    """A minimal resolved production config, as `docker compose config` would emit it."""
+    logging = {"driver": "json-file", "options": {"max-size": "10m"}}
+    prod = {"AGENTFORGE_ENVIRONMENT": "production", "AGENTFORGE_CORS_ORIGINS": "[]"}
+    db = {**prod, "AGENTFORGE_DATABASE_URL": "postgresql+asyncpg://u:p@postgres/agentforge"}
+
+    def service(networks, **extra):
+        return {"networks": dict.fromkeys(networks), "logging": logging, **extra}
+
+    return {
+        "networks": {
+            n: {"internal": n in {"data", "cache", "tools"}}
+            for n in ("edge", "web", "data", "cache", "tools", "egress")
+        },
+        "services": {
+            "edge": service(
+                ["edge"],
+                ports=[{"published": "80", "target": 8081}, {"published": "443", "target": 8443}],
+                environment={"AGENTFORGE_DOMAIN": "forge.project.dev"},
+            ),
+            "frontend": service(["web", "edge"]),
+            "api": service(
+                ["web", "data", "cache"],
+                environment={
+                    **db,
+                    "AGENTFORGE_API_KEY": "a" * 40,
+                    "AGENTFORGE_REDIS_URL": "redis://redis:6379/0",
+                    "AGENTFORGE_TRUSTED_PROXY_HOPS": "2",
+                },
+            ),
+            "worker": service(
+                ["data", "tools", "egress"],
+                environment={
+                    **db,
+                    "AGENTFORGE_SANDBOX_KEY": "s" * 40,
+                    "AGENTFORGE_GEMINI_KEY": "g" * 40,
+                },
+            ),
+            "migrate": service(["data"], environment=db),
+            "sandbox": service(
+                ["tools"],
+                environment={"AGENTFORGE_SANDBOX_KEY": "s" * 40},
+                volumes=[{"source": "/var/run/docker.sock", "target": "/var/run/docker.sock"}],
+            ),
+            "postgres": service(["data"]),
+            "redis": service(["cache"]),
+            "tool-image": {"network_mode": "none"},
+        },
+    }
+
+
+def test_valid_segmented_least_privilege_config_passes():
+    validate(valid_config())
+
+
+@pytest.mark.parametrize(
+    "mutate, message",
+    [
+        (
+            lambda c: c["services"]["api"]["environment"].update(AGENTFORGE_GEMINI_KEY="g" * 40),
+            "must not receive AGENTFORGE_GEMINI_KEY",
+        ),
+        (
+            lambda c: c["services"]["api"]["environment"].update(AGENTFORGE_SANDBOX_KEY="s" * 40),
+            "must not receive AGENTFORGE_SANDBOX_KEY",
+        ),
+        (
+            lambda c: c["services"]["worker"]["environment"].update(AGENTFORGE_API_KEY="a" * 40),
+            "worker must not receive",
+        ),
+        (
+            lambda c: c["services"]["edge"]["networks"].update(data=None),
+            "edge may not join network data",
+        ),
+        (
+            lambda c: c["services"]["frontend"]["networks"].update(cache=None),
+            "frontend may not join network cache",
+        ),
+        (lambda c: c["networks"]["data"].update(internal=False), "data must be internal"),
+        (lambda c: c["services"]["redis"].pop("logging"), "redis needs bounded log rotation"),
+        (
+            lambda c: c["services"]["api"]["environment"].update(AGENTFORGE_TRUSTED_PROXY_HOPS="5"),
+            "two proxy hops",
+        ),
+        (
+            lambda c: c["services"]["sandbox"]["environment"].update(
+                AGENTFORGE_SANDBOX_KEY="x" * 40
+            ),
+            "share the gateway key",
+        ),
+        (
+            lambda c: c["services"]["worker"]["environment"].update(
+                AGENTFORGE_SANDBOX_KEY="a" * 40
+            ),
+            "distinct keys",
+        ),
+    ],
+)
+def test_topology_and_secret_violations_are_rejected(mutate, message):
+    config = valid_config()
+    mutate(config)
+    with pytest.raises(ValueError, match=message):
+        validate(config)

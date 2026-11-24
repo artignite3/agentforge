@@ -19,6 +19,26 @@ def compose_command(env_file: Path) -> list[str]:
     ]
 
 
+PROVIDER_SECRETS = ("AGENTFORGE_OPENAI_KEY", "AGENTFORGE_GEMINI_KEY")
+# Who may join each network. Internal networks have no route off the host.
+NETWORK_MEMBERS = {
+    "edge": {"edge", "frontend"},
+    "web": {"frontend", "api"},
+    "data": {"api", "worker", "migrate", "postgres"},
+    "cache": {"api", "redis"},
+    "tools": {"worker", "sandbox"},
+    "egress": {"worker"},
+}
+INTERNAL_NETWORKS = {"data", "cache", "tools"}
+
+
+def _secret(env: dict, name: str) -> str:
+    value = env.get(name) or ""
+    if len(value) < 32:
+        raise ValueError(f"{name} must be set to at least 32 characters")
+    return value
+
+
 def validate(config: dict) -> None:
     """Inspect merged ports/trust boundaries rather than the override in isolation."""
     services = config["services"]
@@ -30,20 +50,46 @@ def validate(config: dict) -> None:
             for mount in service.get("volumes", []):
                 if "docker.sock" in mount.get("source", "") or "docker.sock" in mount["target"]:
                     raise ValueError("Docker socket may be mounted only into the gateway")
+        if service.get("network_mode") != "none":
+            options = (service.get("logging") or {}).get("options") or {}
+            if not options.get("max-size"):
+                raise ValueError(f"{name} needs bounded log rotation")
+        for network in service.get("networks") or {}:
+            if name not in NETWORK_MEMBERS.get(network, set()):
+                raise ValueError(f"{name} may not join network {network}")
+    for network in INTERNAL_NETWORKS:
+        if not config.get("networks", {}).get(network, {}).get("internal"):
+            raise ValueError(f"Network {network} must be internal")
     edge = services["edge"]
     if {(str(p["published"]), p["target"]) for p in edge["ports"]} != {("80", 8081), ("443", 8443)}:
         raise ValueError("Edge must publish only HTTP and HTTPS")
-    for name in ("api", "worker", "migrate"):
-        env = services[name]["environment"]
+    envs = {name: services[name]["environment"] for name in ("api", "worker", "migrate")}
+    for env in envs.values():
         if env["AGENTFORGE_ENVIRONMENT"] != "production" or env["AGENTFORGE_CORS_ORIGINS"] != "[]":
             raise ValueError("Require production mode and same-origin browser access")
-        keys = [env["AGENTFORGE_API_KEY"], env["AGENTFORGE_SANDBOX_KEY"]]
-        if any(len(key) < 32 for key in keys) or keys[0] == keys[1]:
-            raise ValueError("API and gateway need distinct keys of at least 32 characters")
         if not env["AGENTFORGE_DATABASE_URL"].startswith("postgresql+asyncpg://"):
             raise ValueError("Production requires PostgreSQL")
-        if not env["AGENTFORGE_REDIS_URL"].startswith("redis://"):
-            raise ValueError("Production requires Redis")
+    api, worker, migrate = envs["api"], envs["worker"], envs["migrate"]
+    operator_key = _secret(api, "AGENTFORGE_API_KEY")
+    sandbox_key = _secret(worker, "AGENTFORGE_SANDBOX_KEY")
+    if operator_key == sandbox_key:
+        raise ValueError("API and gateway need distinct keys")
+    if _secret(services["sandbox"]["environment"], "AGENTFORGE_SANDBOX_KEY") != sandbox_key:
+        raise ValueError("Worker and gateway must share the gateway key")
+    if not api.get("AGENTFORGE_REDIS_URL", "").startswith("redis://"):
+        raise ValueError("Production requires Redis")
+    if api.get("AGENTFORGE_TRUSTED_PROXY_HOPS") != "2":
+        raise ValueError("The API sits behind Caddy and nginx: trust exactly two proxy hops")
+    # Least privilege: each process holds only the credentials it uses.
+    for secret in ("AGENTFORGE_SANDBOX_KEY", *PROVIDER_SECRETS):
+        if api.get(secret):
+            raise ValueError(f"The public API must not receive {secret}")
+    if worker.get("AGENTFORGE_API_KEY"):
+        raise ValueError("The worker must not receive the operator API key")
+    if any(
+        migrate.get(s) for s in ("AGENTFORGE_API_KEY", "AGENTFORGE_SANDBOX_KEY", *PROVIDER_SECRETS)
+    ):
+        raise ValueError("Migrations must not receive application secrets")
     from scripts.prepare_deploy import public_hostname
 
     public_hostname(edge["environment"]["AGENTFORGE_DOMAIN"])
@@ -67,7 +113,9 @@ def main() -> None:
         if result.returncode:
             raise ValueError("Compose configuration failed; check Compose version/environment")
         validate(json.loads(result.stdout))
-        print("PASS: resolved production config, private ports, gateway socket, keys, and origins")
+        print(
+            "PASS: resolved production config: ports, networks, socket, per-service secrets, logs"
+        )
         if args.require_engine:
             result = subprocess.run(
                 ["docker", "info", "--format", "{{.OSType}}"],
