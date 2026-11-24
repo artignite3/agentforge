@@ -78,6 +78,8 @@ export interface System {
   semantics: string;
   sandbox: string;
   sandbox_ready: boolean;
+  workers_alive: number;
+  principal: { label: string; role: "read" | "submit" | "admin" };
 }
 
 export class API {
@@ -98,7 +100,7 @@ export class API {
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: AbortSignal.timeout(10000),
     });
-    const data = await response.json();
+    const data = await response.json().catch(() => ({}));
     if (!response.ok)
       throw new Error(
         typeof data.detail === "string"
@@ -122,8 +124,8 @@ export class API {
   trace(id: string) {
     return this.request<Trace>(`/v1/runs/${id}/trace`);
   }
-  events(id: string) {
-    return this.request<Event[]>(`/v1/runs/${id}/events`);
+  events(id: string, after = 0) {
+    return this.request<Event[]>(`/v1/runs/${id}/events?after=${after}`);
   }
   cancel(id: string) {
     return this.request<Run>(`/v1/runs/${id}/cancel`, {});

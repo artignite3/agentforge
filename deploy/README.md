@@ -130,7 +130,7 @@ python3 -m venv .release-venv
 
 This verifies frontend/API readiness, HSTS, unauthorized rejection, authenticated production mode, sandbox readiness, and a complete regression repair. It validates normal TLS certificates and does not follow redirects carrying credentials.
 
-Also load the URL from your laptop or a mobile connection outside the cloud network. Select Connect workspace and enter the host's `AGENTFORGE_API_KEY` privately. Do not publish the key in a README. The public landing/dashboard can be shared without the key; viewing execution data or submitting jobs needs authorization.
+Also load the URL from your laptop or a mobile connection outside the cloud network. Select Connect workspace and enter a key privately: the host's bootstrap `AGENTFORGE_API_KEY` for administration, or a per-user key from `python -m agentforge.admin keys create`. Do not publish the key in a README. The public landing/dashboard can be shared without the key; viewing execution data or submitting jobs needs authorization.
 
 Verify the original failed tests, patch, passing tests, and completed trace. Before declaring release, verify worker crash recovery/cancellation and UID/resource/network restrictions on this host using the existing tests and release checklist. A local test pass does not establish a hardened public execution environment.
 
@@ -153,7 +153,44 @@ dc exec -T postgres psql -U agentforge -d agentforge_restore_check -c 'SELECT co
 
 If the scratch database already exists, choose another name. Review table counts and migration version against the source. Never pass `--clean` against production for a rehearsal. Retain or remove only the identified scratch database after review. Choose backup frequency/RPO/RTO before operating the service; this package does not schedule backups automatically.
 
-## 9. Updates, rollback, and shutdown
+## 9. Upgrading to role-based keys and segmented networks
+
+This release adds a migration (`credentials`, `worker_heartbeats`) and changes the Compose network layout. Existing data and the current `AGENTFORGE_API_KEY` keep working: the migration turns the existing owner into an admin bootstrap credential with the same hash.
+
+```bash
+sudo python3 scripts/backup.py --output backups/pre-keys.dump
+git pull && sudo python3 scripts/deploy_check.py --require-engine
+dc build
+dc stop worker api
+dc run --rm migrate
+dc up -d --wait --wait-timeout 180 --remove-orphans
+.release-venv/bin/pip install . && .release-venv/bin/python scripts/verify_release.py --url https://forge.yourdomain.com --run-demo
+```
+
+Then issue per-user keys instead of sharing the bootstrap key:
+
+```bash
+dc exec api python -m agentforge.admin keys create --label "your-name" --role submit
+dc exec api python -m agentforge.admin keys create --label prometheus --role read
+```
+
+Verify the network boundary on the host. Each command should fail to connect:
+
+```bash
+dc exec frontend wget -qO- -T 3 http://sandbox:8001/health
+dc exec edge wget -qO- -T 3 http://api:8000/health
+```
+
+Schedule retention and backups with the host's scheduler (example crontab for root):
+
+```cron
+15 3 * * * cd /home/azureuser/agentforge && docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.production.yml exec -T api python -m agentforge.admin prune --checkpoint-days 30
+45 3 * * * cd /home/azureuser/agentforge && python3 scripts/backup.py --output backups/nightly-$(date +\%F).dump
+```
+
+Encrypt and copy backups off-host, and delete old local dumps according to your retention policy.
+
+## 10. Updates, rollback, and shutdown
 
 Before updates: create a new uniquely named backup, save the current Git SHA, review migration compatibility, and test on a separate environment. For controlled upgrades, stop `worker` and `api`, update/build the reviewed revision, apply migrations, then restart and rerun release verification. This baseline has a maintenance window rather than zero-downtime releases.
 
