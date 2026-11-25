@@ -11,10 +11,10 @@
   font-size: 13px;
   line-height: 1.5;
   font-weight: 400;
-  --muted: #8a8c8f;
+  --muted: #9a9c9f;
   --text: #e8e9ea;
   --text-2: #b7b9bc;
-  --text-3: #8a8c8f;
+  --text-3: #9a9c9f;
   --ink: #1d1a17; /* text on the accent */
   --red: #e09aa0;
   --amber: #d8b27c;
@@ -380,10 +380,6 @@ h1 {
   font-size: 13px;
   font-weight: 500;
 }
-.panel-heading h3 {
-  font-size: 12px;
-  font-weight: 500;
-}
 .panel-heading > svg {
   color: var(--text-3);
 }
@@ -634,7 +630,7 @@ tbody tr:hover {
   place-items: center;
   margin-bottom: 18px;
 }
-.empty h3 {
+.empty h2 {
   font-size: 14px;
   font-weight: 500;
   color: var(--text);
@@ -1022,16 +1018,6 @@ dd {
   align-items: center;
   justify-content: space-between;
 }
-.agent-box {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border: 1px solid #524738;
-  border-radius: 8px;
-  background: #302a22;
-  color: var(--amber);
-}
 .version-tag {
   font-size: 11px;
   color: var(--text-2);
@@ -1043,7 +1029,7 @@ dd {
 .agent-card h3 {
   font-size: 14px;
   font-weight: 500;
-  margin-top: 17px;
+  margin-top: 0;
 }
 .agent-card p {
   font-size: 12px;
@@ -1117,17 +1103,6 @@ dd {
 .provider-card {
   padding: 22px;
 }
-.provider-symbol {
-  width: 43px;
-  height: 43px;
-  border-radius: 8px;
-  background: #282b29;
-  border: 1px solid #41473e;
-  color: var(--text-2);
-  display: grid;
-  place-items: center;
-  margin-bottom: 20px;
-}
 .provider-heading {
   display: flex;
   flex-wrap: wrap;
@@ -1135,7 +1110,7 @@ dd {
   justify-content: space-between;
   gap: 8px;
 }
-.provider-heading h3 {
+.provider-heading h2 {
   font-size: 14px;
   font-weight: 500;
 }
@@ -1344,7 +1319,7 @@ dd {
     font-size: 24px;
   }
   .stat-note {
-    font-size: 11px;
+    font-size: 12px;
   }
   .trace-layout {
     grid-template-columns: minmax(0, 1fr) 235px;
@@ -1361,7 +1336,7 @@ dd {
   .provider-card {
     padding: 17px;
   }
-  .provider-heading h3 {
+  .provider-heading h2 {
     font-size: 13px;
   }
 }
@@ -1499,7 +1474,7 @@ dd {
     font-size: 11px;
   }
   .stat-note {
-    font-size: 11px;
+    font-size: 12px;
   }
   .overview-strip {
     padding: 12px;
@@ -1591,7 +1566,8 @@ dd {
 @media (prefers-reduced-motion: reduce) {
   * {
     animation: none !important;
-    transition: none !important;
+    transition-property:
+      color, background-color, border-color, opacity !important;
   }
 }
 
@@ -1719,4 +1695,57 @@ td.numeric {
   .health-row p {
     grid-column: 2;
   }
+}
+
+/* Browser surfaces in the product palette. */
+:root {
+  color-scheme: dark;
+  scrollbar-color: #3a3f44 transparent;
+  caret-color: var(--accent);
+}
+p {
+  text-wrap: pretty;
+}
+
+/* Visible keyboard focus on clickable rows and tabs. */
+tbody tr:focus-visible,
+.tabs button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Disconnect: a 32px target instead of 21px. */
+.sidebar-bottom button {
+  display: grid;
+  place-items: center;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-radius: 6px;
+}
+.sidebar-bottom button:hover {
+  background: #202327;
+}
+
+/* Explanation and step summaries are prose: 12px floor. */
+.agent-output-note,
+.step-header p {
+  font-size: 12px;
+}
+
+/* Agents: one ruled grid inside the panel instead of cards nested in a card. */
+.agent-grid {
+  gap: 0;
+  border-top: 1px solid var(--line);
+  padding: 0;
+}
+/* Hairlines drawn by each cell, so an unfilled last row stays the panel colour. */
+.agent-card {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 20px;
+  box-shadow:
+    1px 0 0 var(--line),
+    0 1px 0 var(--line);
 }

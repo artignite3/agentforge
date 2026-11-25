@@ -191,6 +191,8 @@ export default function App() {
               key={name}
               className={`nav-item ${page === name ? "selected" : ""}`}
               onClick={() => navigate(name)}
+              aria-label={name}
+              aria-current={page === name ? "page" : undefined}
             >
               <Icon size={18} />
               <span>{name}</span>
@@ -236,6 +238,7 @@ export default function App() {
             <button
               className="icon-button"
               title="Refresh"
+              aria-label="Refresh"
               onClick={() => void refresh()}
             >
               <RefreshCw size={16} />
@@ -337,12 +340,9 @@ export default function App() {
                       {agents.map((a) => (
                         <div className="agent-card" key={a.id}>
                           <div className="agent-card-top">
-                            <span className="agent-box">
-                              <Box size={22} />
-                            </span>
+                            <h3>{a.name}</h3>
                             <span className="version-tag">{a.version}</span>
                           </div>
-                          <h3>{a.name}</h3>
                           <p>{a.config.instructions}</p>
                           <div className="agent-limits">
                             <span>
@@ -393,17 +393,14 @@ export default function App() {
                           className="panel provider-card"
                           key={p.provider}
                         >
-                          <div className="provider-symbol">
-                            <Cpu size={23} />
-                          </div>
                           <div className="provider-heading">
-                            <h3>
+                            <h2>
                               {p.provider === "demo"
                                 ? "Deterministic demo"
                                 : p.provider === "openai"
                                   ? "OpenAI"
                                   : "Google Gemini"}
-                            </h3>
+                            </h2>
                             <span
                               className={`config-tag ${p.configured ? "enabled" : ""}`}
                             >

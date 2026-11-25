@@ -163,7 +163,13 @@ export function RunsView({
                     key={run.id}
                     onClick={() => openRun(run.id)}
                     tabIndex={0}
-                    onKeyDown={(e) => e.key === "Enter" && openRun(run.id)}
+                    aria-label={`Open run ${run.id.slice(0, 8)}: ${run.task}`}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        openRun(run.id);
+                      }
+                    }}
                   >
                     <td>
                       <div className="run-cell">

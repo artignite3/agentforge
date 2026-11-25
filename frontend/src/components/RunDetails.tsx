@@ -199,10 +199,14 @@ export function RunDetails({
           )}
           <div className="trace-layout">
             <section className="panel trace-panel">
-              <div className="tabs">
+              <div className="tabs" role="tablist" aria-label="Run trace">
                 {["Timeline", "Events", "Checkpoint"].map((t) => (
                   <button
                     key={t}
+                    role="tab"
+                    id={`tab-${t}`}
+                    aria-selected={tab === t}
+                    aria-controls="trace-tabpanel"
                     className={tab === t ? "active" : ""}
                     onClick={() => setTab(t)}
                   >
@@ -211,83 +215,93 @@ export function RunDetails({
                   </button>
                 ))}
               </div>
-              {tab === "Timeline" && (
-                <div className="timeline">
-                  {(() => {
-                    const changes = fileChanges(trace.steps);
-                    return trace.steps.map((step) => (
-                      <StepRow
-                        key={step.id}
-                        step={step}
-                        change={changes[step.id]}
-                        expanded={expanded === step.id}
-                        onClick={() =>
-                          setExpanded(expanded === step.id ? null : step.id)
-                        }
-                      />
-                    ));
-                  })()}
-                  {!trace.steps.length && (
-                    <Empty title={(EMPTY[trace.run.status] ?? EMPTY.QUEUED)[0]}>
-                      {(EMPTY[trace.run.status] ?? EMPTY.QUEUED)[1]}
-                    </Empty>
-                  )}
-                  <div className="timeline-end">
-                    <span
-                      className={`timeline-node ${trace.run.status === "COMPLETED" ? "done" : ""}`}
-                    >
-                      <Check size={13} />
-                    </span>
-                    <strong>
-                      {terminal.has(trace.run.status)
-                        ? statusLabel(trace.run.status)
-                        : "In progress"}
-                    </strong>
-                  </div>
-                </div>
-              )}
-              {tab === "Events" && (
-                <div className="event-list">
-                  {events.map((event) => (
-                    <div key={event.id}>
-                      <code>{time(event.at)}</code>
-                      <span>{event.kind}</span>
-                      <pre>{JSON.stringify(event.data, null, 2)}</pre>
+              <div
+                role="tabpanel"
+                id="trace-tabpanel"
+                aria-labelledby={`tab-${tab}`}
+              >
+                {tab === "Timeline" && (
+                  <div className="timeline">
+                    {(() => {
+                      const changes = fileChanges(trace.steps);
+                      return trace.steps.map((step) => (
+                        <StepRow
+                          key={step.id}
+                          step={step}
+                          change={changes[step.id]}
+                          expanded={expanded === step.id}
+                          onClick={() =>
+                            setExpanded(expanded === step.id ? null : step.id)
+                          }
+                        />
+                      ));
+                    })()}
+                    {!trace.steps.length && (
+                      <Empty
+                        title={(EMPTY[trace.run.status] ?? EMPTY.QUEUED)[0]}
+                      >
+                        {(EMPTY[trace.run.status] ?? EMPTY.QUEUED)[1]}
+                      </Empty>
+                    )}
+                    <div className="timeline-end">
+                      <span
+                        className={`timeline-node ${trace.run.status === "COMPLETED" ? "done" : ""}`}
+                      >
+                        <Check size={13} />
+                      </span>
+                      <strong>
+                        {terminal.has(trace.run.status)
+                          ? statusLabel(trace.run.status)
+                          : "In progress"}
+                      </strong>
                     </div>
-                  ))}
-                </div>
-              )}
-              {tab === "Checkpoint" && (
-                <div className="checkpoint">
-                  <div className="checkpoint-heading">
-                    <Database size={17} />
-                    <strong>
-                      Checkpoint {trace.checkpoint?.sequence ?? 0}
-                    </strong>
-                    <span>schema v{trace.checkpoint?.schema_version ?? 1}</span>
                   </div>
-                  <p>
-                    Saved in the same transaction as the step that produced it.
-                    A recovered worker resumes from here.
-                  </p>
-                  {Object.entries(trace.checkpoint?.payload.files || {}).map(
-                    ([name, source]) => (
-                      <div className="source-file" key={name}>
-                        <div>
-                          <FileCode2 size={14} />
-                          {name}
-                        </div>
-                        <pre>{source}</pre>
+                )}
+                {tab === "Events" && (
+                  <div className="event-list">
+                    {events.map((event) => (
+                      <div key={event.id}>
+                        <code>{time(event.at)}</code>
+                        <span>{event.kind}</span>
+                        <pre>{JSON.stringify(event.data, null, 2)}</pre>
                       </div>
-                    ),
-                  )}
-                </div>
-              )}
+                    ))}
+                  </div>
+                )}
+                {tab === "Checkpoint" && (
+                  <div className="checkpoint">
+                    <div className="checkpoint-heading">
+                      <Database size={17} />
+                      <strong>
+                        Checkpoint {trace.checkpoint?.sequence ?? 0}
+                      </strong>
+                      <span>
+                        schema v{trace.checkpoint?.schema_version ?? 1}
+                      </span>
+                    </div>
+                    <p>
+                      Saved in the same transaction as the step that produced
+                      it. A recovered worker resumes from here.
+                    </p>
+                    {Object.entries(trace.checkpoint?.payload.files || {}).map(
+                      ([name, source]) => (
+                        <div className="source-file" key={name}>
+                          <div>
+                            <FileCode2 size={14} />
+                            {name}
+                          </div>
+                          <pre>{source}</pre>
+                        </div>
+                      ),
+                    )}
+                  </div>
+                )}
+              </div>
             </section>
             <aside className="run-aside">
               <section className="panel">
                 <div className="panel-heading">
-                  <h3>Run details</h3>
+                  <h2>Run details</h2>
                   <LockKeyhole size={15} />
                 </div>
                 <dl>
@@ -317,7 +331,7 @@ export function RunDetails({
               </section>
               <section className="panel">
                 <div className="panel-heading">
-                  <h3>Model explanation (not verified)</h3>
+                  <h2>Model explanation (not verified)</h2>
                   <Terminal size={15} />
                 </div>
                 <p className="agent-output">

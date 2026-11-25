@@ -136,7 +136,11 @@ export function StepRow({
           <Terminal size={12} />
         )}
       </span>
-      <button className="step-header" onClick={onClick}>
+      <button
+        className="step-header"
+        onClick={onClick}
+        aria-expanded={expanded}
+      >
         <div>
           <div className="step-title">
             <strong>{title}</strong>
