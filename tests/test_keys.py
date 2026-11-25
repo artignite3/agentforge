@@ -147,3 +147,47 @@ async def test_short_or_missing_bootstrap_key_is_rejected_at_startup(settings, s
     settings.api_key = SecretStr("short")
     with pytest.raises(ValueError, match="AGENTFORGE_API_KEY"):
         create_app(settings, store)
+
+
+class CountingLookup:
+    def __init__(self, principal=None):
+        self.calls, self.principal_value = 0, principal
+
+    async def principal(self, digest):
+        self.calls += 1
+        return self.principal_value
+
+
+async def test_unknown_keys_are_rate_limited_before_any_database_lookup(settings, store):
+    from agentforge.security import Limiter, PrincipalCache, authentication
+
+    settings.rate_limit = 3
+    lookup = CountingLookup()
+    require = authentication(settings, Limiter(settings), lookup, PrincipalCache())("read")
+    statuses = []
+    for i in range(10):
+        request = Request(
+            {
+                "type": "http",
+                "client": ("198.51.100.7", 1),
+                "headers": [(b"authorization", f"Bearer random-guess-{i:04d}-{'x' * 32}".encode())],
+            }
+        )
+        try:
+            await require(request)
+        except Exception as exc:  # HTTPException
+            statuses.append(exc.status_code)
+    # The lookup bucket admits `rate_limit` queries; later guesses never reach the database.
+    assert lookup.calls == 3
+    assert statuses[:3] == [401, 401, 401] and set(statuses[3:]) == {429}
+
+
+async def test_unknown_keys_cannot_evict_cached_valid_keys():
+    from agentforge.security import Principal, PrincipalCache
+
+    cache = PrincipalCache(size=4)
+    valid = Principal("owner", "cred", "label", "read")
+    await cache.get("valid", CountingLookup(valid))
+    for i in range(50):
+        await cache.get(f"junk-{i}", CountingLookup(None))
+    assert cache.cached("valid") == valid
