@@ -147,25 +147,37 @@ class Limiter:
 
 
 class PrincipalCache:
-    """Short-lived cache so each request does not need a credential query.
+    """Short-lived cache of *valid* credentials so each request needs no credential query.
 
-    Revocation and expiry take effect within `ttl` seconds in every API process.
+    Revocation and expiry take effect within `ttl` seconds in every API process. Unknown
+    keys are never cached: random keys must not be able to evict real ones.
     """
 
     def __init__(self, ttl: float = 5.0, size: int = 1024):
         self.ttl, self.size = ttl, size
         self.entries: dict[str, tuple[float, Principal | None]] = {}
 
-    async def get(self, digest: str, lookup: CredentialLookup) -> Principal | None:
-        now = time.monotonic()
-        cached = self.entries.get(digest)
-        if cached and cached[0] > now:
-            principal = cached[1]
-        else:
+    def cached(self, digest: str) -> Principal | None:
+        entry = self.entries.get(digest)
+        if entry is None or entry[0] <= time.monotonic():
+            return None
+        return entry[1]
+
+    async def get(
+        self,
+        digest: str,
+        lookup: CredentialLookup,
+        before_lookup: Callable[[], Awaitable[None]] | None = None,
+    ) -> Principal | None:
+        principal = self.cached(digest)
+        if principal is None:
+            if before_lookup is not None:
+                await before_lookup()  # Admission control before any database work.
             principal = await lookup.principal(digest)
-            if len(self.entries) >= self.size:
-                self.entries.clear()
-            self.entries[digest] = (now + self.ttl, principal)
+            if principal is not None:
+                if len(self.entries) >= self.size:
+                    self.entries.clear()
+                self.entries[digest] = (time.monotonic() + self.ttl, principal)
         if principal and principal.expires_at is not None and principal.expires_at <= time.time():
             return None
         return principal
@@ -177,9 +189,12 @@ class PrincipalCache:
 def authentication(
     settings: Settings, limiter: Limiter, lookup: CredentialLookup, cache: PrincipalCache
 ) -> Callable[[Role], Callable[[Request], Awaitable[Principal]]]:
-    async def unauthorized(request: Request) -> NoReturn:
+    def client_bucket(request: Request, kind: str) -> str:
         # Hash the client address so raw IPs never become Redis keys.
-        await limiter.check("unauth:" + key_hash(client_ip(request, settings.trusted_proxy_hops)))
+        return f"{kind}:" + key_hash(client_ip(request, settings.trusted_proxy_hops))
+
+    async def unauthorized(request: Request) -> NoReturn:
+        await limiter.check(client_bucket(request, "unauth"))
         raise HTTPException(401, "Invalid API key", headers={"WWW-Authenticate": "Bearer"})
 
     def require(role: Role) -> Callable[[Request], Awaitable[Principal]]:
@@ -188,7 +203,13 @@ def authentication(
             supplied = header.removeprefix("Bearer ") if header.startswith("Bearer ") else ""
             if len(supplied) < 32 or len(supplied) > 256:
                 await unauthorized(request)
-            principal = await cache.get(key_hash(supplied), lookup)
+            # Uncached keys cost a database query, so each client's lookups are rate limited
+            # *before* the query; valid keys are cached and rarely reach this path.
+            principal = await cache.get(
+                key_hash(supplied),
+                lookup,
+                lambda: limiter.check(client_bucket(request, "lookup")),
+            )
             if principal is None:
                 await unauthorized(request)
             await limiter.check(principal.credential_id)
