@@ -46,7 +46,12 @@ export interface Step {
     stdout?: string;
     stderr?: string;
     exit_code?: number;
-    action?: { operation: string; explanation: string; content: string };
+    action?: {
+      operation: string;
+      path: string;
+      explanation: string;
+      content: string;
+    };
     input_tokens?: number;
     output_tokens?: number;
   };

@@ -1,17 +1,20 @@
 import type { ReactNode } from "react";
 import { Workflow } from "lucide-react";
+import { statusLabel } from "../format";
+
 export function Badge({ status }: { status: string }) {
   return (
     <span className={`badge ${status.toLowerCase()}`}>
       <span className="status-dot" />
-      {status.replaceAll("_", " ").toLowerCase()}
+      {statusLabel(status)}
     </span>
   );
 }
+
 export function Empty({
   title,
   children,
-  icon = <Workflow size={27} />,
+  icon = <Workflow size={24} />,
 }: {
   title: string;
   children: ReactNode;
@@ -20,7 +23,7 @@ export function Empty({
   return (
     <div className="empty">
       <div className="empty-icon">{icon}</div>
-      <h3>{title}</h3>
+      <h2>{title}</h2>
       <p>{children}</p>
     </div>
   );
@@ -30,24 +33,22 @@ export function Stat({
   label,
   value,
   note,
-  icon,
 }: {
   label: string;
   value: string;
   note: string;
-  icon: ReactNode;
 }) {
   return (
     <section className="stat">
       <div className="stat-top">
         <span>{label}</span>
-        {icon}
       </div>
       <div className="stat-value">{value}</div>
       <div className="stat-note">{note}</div>
     </section>
   );
 }
+
 export function Summary({
   label,
   value,
@@ -67,28 +68,25 @@ export function Summary({
     </div>
   );
 }
+
+/** One dependency per row: status dot, name, current value, and what it means. */
 export function Health({
-  icon,
   name,
   value,
   detail,
   good,
 }: {
-  icon: ReactNode;
   name: string;
   value: string;
   detail: string;
   good: boolean;
 }) {
   return (
-    <section className="panel health-card">
-      <div>
-        {icon}
-        <span className={`connection-dot ${good ? "online" : ""}`} />
-      </div>
-      <h3>{name}</h3>
-      <strong>{value}</strong>
+    <div className="health-row">
+      <span className={`connection-dot ${good ? "online" : "offline"}`} />
+      <strong>{name}</strong>
+      <span className="health-value">{value}</span>
       <p>{detail}</p>
-    </section>
+    </div>
   );
 }

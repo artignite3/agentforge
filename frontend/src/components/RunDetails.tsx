@@ -5,7 +5,7 @@ import {
   Cpu,
   Database,
   FileCode2,
-  Fingerprint,
+  CircleDollarSign,
   LoaderCircle,
   LockKeyhole,
   RotateCcw,
@@ -14,10 +14,74 @@ import {
   X,
   XCircle,
 } from "lucide-react";
-import { API, type Agent, type Trace, type Event } from "../api";
-import { terminal, duration, money, time } from "../format";
+import { API, type Agent, type Step, type Trace, type Event } from "../api";
+import {
+  terminal,
+  duration,
+  money,
+  runDuration,
+  statusLabel,
+  time,
+} from "../format";
 import { Badge, Empty, Summary } from "./ui";
 import { StepRow } from "./StepRow";
+/** What each write changed, reconstructed from the trace: the last content the run saw
+ * for that path (a read, or an earlier write) before the write, and the written content. */
+function fileChanges(steps: Step[]) {
+  const known: Record<string, string> = {};
+  let proposed: { path: string; content: string } | null = null;
+  const changes: Record<
+    string,
+    { path: string; before: string; after: string }
+  > = {};
+  for (const step of steps) {
+    if (step.status !== "SUCCEEDED") continue;
+    const action = step.detail.action;
+    if (step.kind === "model" && action?.operation === "write_file") {
+      proposed = { path: action.path, content: action.content };
+      continue;
+    }
+    const path = step.detail.path || "";
+    if (step.detail.operation === "read_file" && step.detail.exit_code === 0)
+      known[path] = step.detail.stdout || "";
+    if (
+      step.detail.operation === "write_file" &&
+      step.detail.exit_code === 0 &&
+      proposed
+    ) {
+      if (path in known)
+        changes[step.id] = {
+          path,
+          before: known[path],
+          after: proposed.content,
+        };
+      known[path] = proposed.content;
+      proposed = null;
+    }
+  }
+  return changes;
+}
+
+const EMPTY: Record<string, [string, string]> = {
+  QUEUED: [
+    "Waiting for a worker",
+    "The run is queued in the database and starts when a worker claims it.",
+  ],
+  RETRYING: [
+    "Waiting to retry",
+    "The run is scheduled to resume after its backoff.",
+  ],
+  CANCELLED: [
+    "Cancelled before any step ran",
+    "No model or tool call was made.",
+  ],
+  TIMED_OUT: [
+    "Timed out before any step ran",
+    "The deadline passed while the run waited in the queue.",
+  ],
+  FAILED: ["Failed before any step ran", "See the error above for the reason."],
+};
+
 interface Props {
   selected: string;
   trace: Trace | null;
@@ -63,7 +127,6 @@ export function RunDetails({
       </button>
       <div className="page-heading">
         <div>
-          <div className="eyebrow">EXECUTION TRACE</div>
           <h1>
             Repository repair{" "}
             <span className="heading-id">/{selected.slice(0, 8)}</span>
@@ -111,9 +174,10 @@ export function RunDetails({
             />
             <Summary
               label="Elapsed"
-              value={duration(
-                (trace.run.updated_at - trace.run.created_at) * 1000,
-              )}
+              value={(() => {
+                const ms = runDuration(trace.run);
+                return ms === null ? "—" : duration(ms);
+              })()}
               icon={<Clock3 size={16} />}
             />
             <Summary
@@ -124,7 +188,7 @@ export function RunDetails({
             <Summary
               label="Estimated spend"
               value={money(trace.run.spent_microusd)}
-              icon={<Fingerprint size={16} />}
+              icon={<CircleDollarSign size={16} />}
             />
           </div>
           {trace.run.error_type && (
@@ -135,10 +199,14 @@ export function RunDetails({
           )}
           <div className="trace-layout">
             <section className="panel trace-panel">
-              <div className="tabs">
+              <div className="tabs" role="tablist" aria-label="Run trace">
                 {["Timeline", "Events", "Checkpoint"].map((t) => (
                   <button
                     key={t}
+                    role="tab"
+                    id={`tab-${t}`}
+                    aria-selected={tab === t}
+                    aria-controls="trace-tabpanel"
                     className={tab === t ? "active" : ""}
                     onClick={() => setTab(t)}
                   >
@@ -147,79 +215,93 @@ export function RunDetails({
                   </button>
                 ))}
               </div>
-              {tab === "Timeline" && (
-                <div className="timeline">
-                  {trace.steps.map((step) => (
-                    <StepRow
-                      key={step.id}
-                      step={step}
-                      expanded={expanded === step.id}
-                      onClick={() =>
-                        setExpanded(expanded === step.id ? null : step.id)
-                      }
-                    />
-                  ))}
-                  {!trace.steps.length && (
-                    <Empty title="Waiting for a worker">
-                      The run is safely queued in the database.
-                    </Empty>
-                  )}
-                  <div className="timeline-end">
-                    <span
-                      className={`timeline-node ${trace.run.status === "COMPLETED" ? "done" : ""}`}
-                    >
-                      <Check size={13} />
-                    </span>
-                    <strong>
-                      {terminal.has(trace.run.status)
-                        ? trace.run.status.replaceAll("_", " ").toLowerCase()
-                        : "Execution in progress"}
-                    </strong>
-                  </div>
-                </div>
-              )}
-              {tab === "Events" && (
-                <div className="event-list">
-                  {events.map((event) => (
-                    <div key={event.id}>
-                      <code>{time(event.at)}</code>
-                      <span>{event.kind}</span>
-                      <pre>{JSON.stringify(event.data, null, 2)}</pre>
+              <div
+                role="tabpanel"
+                id="trace-tabpanel"
+                aria-labelledby={`tab-${tab}`}
+              >
+                {tab === "Timeline" && (
+                  <div className="timeline">
+                    {(() => {
+                      const changes = fileChanges(trace.steps);
+                      return trace.steps.map((step) => (
+                        <StepRow
+                          key={step.id}
+                          step={step}
+                          change={changes[step.id]}
+                          expanded={expanded === step.id}
+                          onClick={() =>
+                            setExpanded(expanded === step.id ? null : step.id)
+                          }
+                        />
+                      ));
+                    })()}
+                    {!trace.steps.length && (
+                      <Empty
+                        title={(EMPTY[trace.run.status] ?? EMPTY.QUEUED)[0]}
+                      >
+                        {(EMPTY[trace.run.status] ?? EMPTY.QUEUED)[1]}
+                      </Empty>
+                    )}
+                    <div className="timeline-end">
+                      <span
+                        className={`timeline-node ${trace.run.status === "COMPLETED" ? "done" : ""}`}
+                      >
+                        <Check size={13} />
+                      </span>
+                      <strong>
+                        {terminal.has(trace.run.status)
+                          ? statusLabel(trace.run.status)
+                          : "In progress"}
+                      </strong>
                     </div>
-                  ))}
-                </div>
-              )}
-              {tab === "Checkpoint" && (
-                <div className="checkpoint">
-                  <div className="checkpoint-heading">
-                    <Database size={17} />
-                    <strong>
-                      Checkpoint {trace.checkpoint?.sequence ?? 0}
-                    </strong>
-                    <span>schema v{trace.checkpoint?.schema_version ?? 1}</span>
                   </div>
-                  <p>
-                    Committed atomically with step completion. Recovery resumes
-                    after this checkpoint.
-                  </p>
-                  {Object.entries(trace.checkpoint?.payload.files || {}).map(
-                    ([name, source]) => (
-                      <div className="source-file" key={name}>
-                        <div>
-                          <FileCode2 size={14} />
-                          {name}
-                        </div>
-                        <pre>{source}</pre>
+                )}
+                {tab === "Events" && (
+                  <div className="event-list">
+                    {events.map((event) => (
+                      <div key={event.id}>
+                        <code>{time(event.at)}</code>
+                        <span>{event.kind}</span>
+                        <pre>{JSON.stringify(event.data, null, 2)}</pre>
                       </div>
-                    ),
-                  )}
-                </div>
-              )}
+                    ))}
+                  </div>
+                )}
+                {tab === "Checkpoint" && (
+                  <div className="checkpoint">
+                    <div className="checkpoint-heading">
+                      <Database size={17} />
+                      <strong>
+                        Checkpoint {trace.checkpoint?.sequence ?? 0}
+                      </strong>
+                      <span>
+                        schema v{trace.checkpoint?.schema_version ?? 1}
+                      </span>
+                    </div>
+                    <p>
+                      Saved in the same transaction as the step that produced
+                      it. A recovered worker resumes from here.
+                    </p>
+                    {Object.entries(trace.checkpoint?.payload.files || {}).map(
+                      ([name, source]) => (
+                        <div className="source-file" key={name}>
+                          <div>
+                            <FileCode2 size={14} />
+                            {name}
+                          </div>
+                          <pre>{source}</pre>
+                        </div>
+                      ),
+                    )}
+                  </div>
+                )}
+              </div>
             </section>
             <aside className="run-aside">
               <section className="panel">
                 <div className="panel-heading">
-                  <h3>Run contract</h3>
+                  <h2>Run details</h2>
                   <LockKeyhole size={15} />
                 </div>
                 <dl>
@@ -241,22 +323,26 @@ export function RunDetails({
                   >
                     {trace.checkpoint?.payload.tests_passed
                       ? "Regression tests passed"
-                      : "Awaiting passing tests"}
+                      : terminal.has(trace.run.status)
+                        ? "Not verified"
+                        : "Awaiting passing tests"}
                   </dd>
                 </dl>
               </section>
               <section className="panel">
                 <div className="panel-heading">
-                  <h3>Model explanation (not verified)</h3>
+                  <h2>Model explanation (not verified)</h2>
                   <Terminal size={15} />
                 </div>
                 <p className="agent-output">
                   {trace.run.output ||
-                    "The final explanation appears when execution completes."}
+                    (terminal.has(trace.run.status)
+                      ? "No explanation: the run ended without a finish step."
+                      : "Appears when the planner finishes.")}
                 </p>
                 <p className="agent-output-note">
                   Written by the planner. Completion is decided by the test
-                  result above, not by this text.
+                  result, not by this text.
                 </p>
               </section>
               <div className="security-caption">

@@ -1,22 +1,14 @@
 import { useState } from "react";
-import {
-  ArrowRight,
-  ArrowUpRight,
-  Check,
-  CheckCircle2,
-  Clock3,
-  Code2,
-  Cpu,
-  Database,
-  GitBranch,
-  Play,
-  Radio,
-  Search,
-  ShieldCheck,
-  Workflow,
-} from "lucide-react";
+import { ArrowUpRight, GitBranch, Play, Radio, Search } from "lucide-react";
 import { API, type Agent, type Run } from "../api";
-import { terminal, duration, money, time } from "../format";
+import {
+  terminal,
+  duration,
+  money,
+  runDuration,
+  statusLabel,
+  time,
+} from "../format";
 import { Badge, Empty, Stat } from "./ui";
 interface Props {
   page: string;
@@ -46,9 +38,11 @@ export function RunsView({
     ? Math.round((completed / finished.length) * 100)
     : 0;
   const totalCost = runs.reduce((sum, r) => sum + r.spent_microusd, 0);
+  // Only runs that executed at least one step; a run cancelled in the queue has no duration.
   const latencies = runs
     .filter((r) => terminal.has(r.status))
-    .map((r) => (r.updated_at - r.created_at) * 1000)
+    .map(runDuration)
+    .filter((ms): ms is number => ms !== null)
     .sort((a, b) => a - b);
   const p50 = latencies.length
     ? latencies[Math.floor(latencies.length / 2)]
@@ -63,28 +57,24 @@ export function RunsView({
     <>
       <div className="stats-grid">
         <Stat
-          label="TOTAL RUNS"
+          label="Runs"
           value={api ? String(runs.length) : "—"}
-          note="Most recent 100 executions"
-          icon={<Workflow size={18} />}
+          note="Latest 100"
         />
         <Stat
-          label="SUCCESS RATE"
+          label="Success rate"
           value={api && finished.length ? `${success}%` : "—"}
-          note={`${completed} completed · ${finished.length} terminal`}
-          icon={<CheckCircle2 size={18} />}
+          note={`${completed} of ${finished.length} finished runs`}
         />
         <Stat
-          label="MEDIAN LATENCY"
+          label="Median duration"
           value={p50 === null ? "—" : duration(p50)}
-          note="End-to-end · terminal runs"
-          icon={<Clock3 size={18} />}
+          note="Submission to finish, runs that executed"
         />
         <Stat
-          label="ESTIMATED SPEND"
+          label="Estimated spend"
           value={api ? money(totalCost) : "—"}
-          note="Includes ambiguous reservations"
-          icon={<Cpu size={18} />}
+          note="Configured rates, not an invoice"
         />
       </div>
       {page === "Overview" && (
@@ -95,21 +85,19 @@ export function RunsView({
           <div>
             <strong>
               {active
-                ? `${active} run${active > 1 ? "s" : ""} in flight`
+                ? `${active} active run${active > 1 ? "s" : ""}`
                 : api
-                  ? "Ready for your next execution"
-                  : "Your runtime, in one place"}
+                  ? "No active runs"
+                  : "Not connected"}
             </strong>
             <span>
               {api
-                ? "Every completed step is saved before the next one starts."
-                : "Connect to your control plane to see live runs and execution traces."}
+                ? active
+                  ? "Queued, running, or waiting to retry"
+                  : "New runs start as soon as a worker claims them"
+                : "Connect with an API key to see runs and traces"}
             </span>
           </div>
-          <span className="strip-tag">
-            <Database size={13} />
-            Durable by design
-          </span>
         </div>
       )}
       <section className="panel runs-panel">
@@ -128,7 +116,7 @@ export function RunsView({
             <Search size={15} />
             <input
               aria-label="Search runs"
-              placeholder="Search by run ID or task…"
+              placeholder="Search runs"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -149,7 +137,9 @@ export function RunsView({
               "CANCELLED",
               "TIMED_OUT",
             ].map((s) => (
-              <option key={s}>{s}</option>
+              <option key={s} value={s}>
+                {s === "All statuses" ? s : statusLabel(s)}
+              </option>
             ))}
           </select>
         </div>
@@ -158,12 +148,12 @@ export function RunsView({
             <table>
               <thead>
                 <tr>
-                  <th>RUN / TASK</th>
-                  <th>AGENT</th>
-                  <th>STATUS</th>
-                  <th>STEPS</th>
-                  <th>LATENCY</th>
-                  <th>COST</th>
+                  <th>Run</th>
+                  <th>Agent</th>
+                  <th>Status</th>
+                  <th className="numeric">Steps</th>
+                  <th className="numeric">Duration</th>
+                  <th className="numeric">Cost</th>
                   <th />
                 </tr>
               </thead>
@@ -173,7 +163,13 @@ export function RunsView({
                     key={run.id}
                     onClick={() => openRun(run.id)}
                     tabIndex={0}
-                    onKeyDown={(e) => e.key === "Enter" && openRun(run.id)}
+                    aria-label={`Open run ${run.id.slice(0, 8)}: ${run.task}`}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        openRun(run.id);
+                      }
+                    }}
                   >
                     <td>
                       <div className="run-cell">
@@ -200,11 +196,16 @@ export function RunsView({
                     <td>
                       <Badge status={run.status} />
                     </td>
-                    <td className="mono">{run.checkpoint_seq}</td>
-                    <td className="mono">
-                      {duration((run.updated_at - run.created_at) * 1000)}
+                    <td className="mono numeric">{run.checkpoint_seq}</td>
+                    <td className="mono numeric">
+                      {(() => {
+                        const ms = runDuration(run);
+                        return ms === null ? "—" : duration(ms);
+                      })()}
                     </td>
-                    <td className="mono">{money(run.spent_microusd)}</td>
+                    <td className="mono numeric">
+                      {money(run.spent_microusd)}
+                    </td>
                     <td>
                       <ArrowUpRight size={15} />
                     </td>
@@ -217,90 +218,44 @@ export function RunsView({
           <Empty
             title={
               !api
-                ? "Connect your execution workspace"
+                ? "Not connected"
                 : search || filter !== "All statuses"
                   ? "No matching runs"
-                  : "Your first run starts here"
+                  : "No runs yet"
             }
           >
             {!api ? (
-              "Your runs, traces, and checkpoints will appear here. Your API key stays in memory for this session."
+              "Connect with an API key to see runs. The key stays in memory for this tab only."
             ) : search || filter !== "All statuses" ? (
               "Try a different search or status filter."
             ) : (
               <>
                 <span>
-                  Launch the Repository Engineer to inspect, repair, and verify
-                  a broken sample.
+                  Start a run to repair a bundled fixture and verify it against
+                  its original tests.
                 </span>
                 <button
                   className="button secondary"
                   onClick={() => setCreateOpen(true)}
                 >
                   <Play size={14} />
-                  Launch a run
+                  New run
                 </button>
               </>
             )}
           </Empty>
         )}
         <div className="table-footer">
-          <span>{visibleRuns.length} executions shown</span>
+          <span>
+            {visibleRuns.length} of {runs.length} runs
+          </span>
           <span>
             {lastSync
-              ? `Last synced ${new Date(lastSync).toLocaleTimeString()}`
-              : "No execution data loaded"}
-            <ShieldCheck size={12} />
+              ? `Updated ${new Date(lastSync).toLocaleTimeString()}`
+              : "Not loaded"}
           </span>
         </div>
       </section>
-      {page === "Overview" && (
-        <div className="bottom-grid">
-          <section className="feature-panel">
-            <div className="feature-label">
-              <Code2 size={15} />
-              DEVELOPER FIRST
-            </div>
-            <h3>One API. A durable execution.</h3>
-            <p>
-              Submit a task once. Follow its state through failures, retries,
-              and recovery.
-            </p>
-            <pre>
-              <span>client</span>.run(agent=agent,{"\n"} task=
-              <em>"Repair the failing tests"</em>)
-            </pre>
-            <a href="/api/docs" target="_blank" rel="noreferrer">
-              Open API reference <ArrowRight size={14} />
-            </a>
-          </section>
-          <section className="feature-panel guarantee-panel">
-            <div className="feature-label">
-              <ShieldCheck size={15} />
-              EXECUTION GUARANTEES
-            </div>
-            <div className="guarantee">
-              <Check size={15} />
-              <span>Atomic step + checkpoint commits</span>
-            </div>
-            <div className="guarantee">
-              <Check size={15} />
-              <span>Stale workers cannot commit results</span>
-            </div>
-            <div className="guarantee">
-              <Check size={15} />
-              <span>Bounded retries and spend admission</span>
-            </div>
-            <div className="guarantee">
-              <Check size={15} />
-              <span>Isolated, resource-limited tool execution</span>
-            </div>
-            <div className="semantics">
-              At-least-once execution · Fenced commits
-            </div>
-          </section>
-        </div>
-      )}
     </>
   );
 }
